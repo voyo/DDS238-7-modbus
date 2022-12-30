@@ -13,7 +13,7 @@ Requirements:
         <param field="SerialPort" label="Modbus Port" width="200px" required="true" default="/dev/ttyUSB0" />
         <param field="Mode1" label="Baud rate" width="40px" required="true" default="9600"  />
         <param field="Mode2" label="Device ID" width="40px" required="true" default="1" />
-        <param field="Mode3" label="Reading Interval min." width="40px" required="true" default="1" />
+        <param field="Mode3" label="Reading Interval * 10s." width="40px" required="true" default="1" />
         <param field="Mode6" label="Debug" width="75px">
             <options>
                 <option label="True" value="Debug"/>
@@ -58,7 +58,7 @@ class Dev:
                          elif self.nod == 2:
                             payload = payload / 100   
                  data = payload
-                 Domoticz.Log("Device:"+self.name+" data="+str(data)+" from register: "+str(self.register) )                        
+                 Domoticz.Log("Device:"+self.name+" data="+str(data)+" from register: "+str(hex(self.register)) )
 
 #                 Devices[self.ID].Update(sValue=str(data))
                  Devices[self.ID].Update(0,str(data)+';0',True)
@@ -82,7 +82,7 @@ class BasePlugin:
         self.RS485.serial.parity = minimalmodbus.serial.PARITY_NONE
         self.RS485.serial.stopbits = 1
         self.RS485.serial.timeout = 1
-        self.RS485.debug = True
+        self.RS485.debug = False
         self.RS485.mode = minimalmodbus.MODE_RTU
         
         devicecreated = []
@@ -90,25 +90,38 @@ class BasePlugin:
 # ID,name,type,number_of_decimals,register,size,signed:bool=False,options=None):
 
         self.devs = [
-                 Dev(1,"LifeEnergy","kWh",2,0,2,False,None),
-                 Dev(2,"TotalReactivePower","kWh",2,2,2,False,None),
-                 Dev(3,"Foo","Usage",2,4,2,False,None),                 
-                 Dev(4,"Bar","Usage",2,6,2,False,None),
-                 Dev(5,"RevEnergy","kWh",2,8,2,False,None),
-                 Dev(6,"FwdEnergy","kWh",2,10,2,False,None),
-                 Dev(7,"Voltage Frequency","Custom",2,17,1,False,{ "Custom" : "1;Hz"}),                 
-                 Dev(8,"Voltage_L1","Voltage",1,128,1,False,None),
-                 Dev(9,"Voltage_L2","Voltage",1,129,1,False,None),
-                 Dev(10,"Voltage_L3","Voltage",1,130,1,False,None),
-                 Dev(11,"Current_L1","Current (Single)",2,131,1,False,None),
-                 Dev(12,"Current_L2","Current (Single)",2,132,1,False,None),
-                 Dev(13,"Current_L3","Current (Single)",2,133,1,False,None),
-                 Dev(14,"TotalCurrentPower","Usage",2,135,2,False,None),
-                 Dev(15,"CurrentPowerA","Usage",0,136,1,False,None),
-                 Dev(16,"CurrentPowerB","Usage",0,137,1,False,None),
-                 Dev(17,"CurrentPowerC","Usage",0,138,1,False,None)
+                 Dev(1,"LifeEnergy","kWh",2,0x00,2,False,None),
+                 Dev(2,"TotalReactivePower","kWh",2,0x02,2,False,None),
+                 Dev(3,"Foo","Usage",2,0x04,2,False,None),                 
+                 Dev(4,"Bar","Usage",2,0x06,2,False,None),
+                 Dev(5,"RevEnergy","kWh",2,0x08,2,False,None),
+                 Dev(6,"FwdEnergy","kWh",2,0x10,2,False,None),
+                 Dev(7,"Voltage Frequency","Custom",2,0x11,1,False,{ "Custom" : "1;Hz"}),                 
+                 Dev(8,"Voltage_L1","Voltage",1,0x80,1,False,None),
+                 Dev(9,"Voltage_L2","Voltage",1,0x81,1,False,None),
+                 Dev(10,"Voltage_L3","Voltage",1,0x82,1,False,None),
+                 Dev(11,"Current_L1","Current (Single)",2,0x83,1,False,None),
+                 Dev(12,"Current_L2","Current (Single)",2,0x84,1,False,None),
+                 Dev(13,"Current_L3","Current (Single)",2,0x85,1,False,None),
+                 Dev(14,"TotalActivePower","Usage",2,0x86,2,False,None),
+                 Dev(15,"TotalPower","Usage",2,0x87,2,False,None),
+                 Dev(16,"ActivePowerA","Usage",0,0x88,1,False,None),
+                 Dev(17,"ActivePowerB","Usage",0,0x89,1,False,None),
+                 Dev(18,"ActivePowerC","Usage",0,0x8A,1,False,None),
+                 Dev(19,"TotalReactivePower","Usage",2,0x8C,1,False,None),
+                 Dev(20,"ReactivePowerA","Usage",0,0x8D,1,False,None),
+                 Dev(21,"ReactivePowerB","Usage",0,0x8E,1,False,None),
+                 Dev(22,"ReactivePowerC","Usage",0,0x8F,1,False,None), 
+                 Dev(23,"TotalApparentPower","Usage",2,0x90,1,False,None),
+                 Dev(24,"ApparentPowerA","Usage",0,0x92,1,False,None),
+                 Dev(25,"ApparentPowerB","Usage",0,0x93,1,False,None),
+                 Dev(26,"ApparentPowerC","Usage",0,0x94,1,False,None),
+                 Dev(27,"PowerFactor","Usage",3,0x95,1,False,None),
+                 Dev(28,"PowerFactorA","Usage",3,0x96,1,False,None),
+                 Dev(29,"PowerFactorB","Usage",3,0x97,1,False,None),
+                 Dev(30,"PowerFactorC","Usage",3,0x98,1,False,None)
             ]
-
+#{ "Custom" : "1;factor}),
                 
     def onStop(self):
         Domoticz.Log("DDS238-7 Modbus plugin stop")
@@ -128,7 +141,8 @@ class BasePlugin:
 #                        Devices[i.ID].Update(0,str(i.value))
 #                        Devices[i.ID].Update(nValue=i.value,sValue=str(i.value))
                         if Parameters["Mode6"] == 'Debug':
-                            Domoticz.Debug("in HeartBeat "+i.name+": "+format(i.value))    
+                            Domoticz.Debug("in HeartBeat "+i.name+": "+format(i.value))
+            Domoticz.Log("DDS238-7 set INTERVAL to: " + str(Parameters["Mode3"]) )
             self.runInterval = int(Parameters["Mode3"]) 
 
 
