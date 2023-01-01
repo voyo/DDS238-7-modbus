@@ -28,7 +28,7 @@ Requirements:
 import minimalmodbus
 import serial
 import Domoticz
-
+from time import sleep
 
 
 class Dev:
