@@ -50,9 +50,27 @@ class Dev:
 
     def UpdateValue(self,RS485):
                  if self.size == 1:
-                         payload = RS485.read_register(self.register,self.nod)
+                     while True:
+                       try:
+                           payload = RS485.read_register(self.register,self.nod)
+                       except Exception as e:
+#                           Domoticz.Log("Connection failure: "+str(e))
+                           Domoticz.Log("Modbus connection failure")
+                           Domoticz.Log("retry updating register in 2 s")
+                           sleep(2.0)
+                           continue
+                       break
                  elif self.size == 2:
-                         payload = RS485.read_long(self.register)
+                         while True:
+                           try:
+                             payload = RS485.read_long(self.register)                           
+                           except Exception as e:
+#                           Domoticz.Log("Connection failure: "+str(e))
+                               Domoticz.Log("Modbus connection failure")
+                               Domoticz.Log("retry updating register in 2 s")
+                               sleep(2.0)
+                               continue
+                           break
                          if self.nod == 1:
                             payload = payload / 10
                          elif self.nod == 2:
