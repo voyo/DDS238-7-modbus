@@ -8,7 +8,7 @@ Requirements:
     2.Communication module Modbus USB to RS485 converter module
 """
 """
-<plugin key="DDS238-7 modbus" name="DDS238-7 modbus" version="0.8.1" author="voyo@no-ip.pl">
+<plugin key="DDS238-7" name="DDS238-7 modbus" version="1.0" author="voyo@no-ip.pl">
     <params>
         <param field="Address" label="IP Address" width="200px" required="true" default="127.0.0.1"/>
         <param field="Port" label="Port" width="30px" required="true" default="502"/>
@@ -31,7 +31,6 @@ Requirements:
         </param>
     </params>
 </plugin>
-
 """
 
 import minimalmodbus
@@ -53,7 +52,6 @@ from pymodbus.payload import BinaryPayloadDecoder
 #
 # borrowed from https://github.com/xbeaudouin/domoticz-ds238-modbus-tcp
 class Average:
-
     def __init__(self):
         self.samples = []
         self.max_samples = 30
@@ -67,7 +65,6 @@ class Average:
         self.samples.append(new_value * (10 ** scale))
         while (len(self.samples) > self.max_samples):
             del self.samples[0]
-
         Domoticz.Debug("Average: {} - {} values".format(self.get(), len(self.samples)))
 
     def get(self):
@@ -95,14 +92,13 @@ class Dev:
         self.Used=Used
         self.Description = Description if Description is not None else ""
         if self.ID not in Devices:
-            msg = "Registering device: "+self.name+" "+str(self.ID)+" "+self.TypeName+"  Description: "+str(self.Description);
-            Domoticz.Log(msg)        
+        
             if self.TypeName != "":
-                 Domoticz.Log("adding Dev with TypeName, "+self.TypeName)
-                 Domoticz.Device(Name=self.name, Unit=self.ID, TypeName=self.TypeName,Used=self.Used,Options=self.options,Description=self.Description).Create()
+                Domoticz.Log("Adding device: "+self.name+" "+str(self.ID)+" "+self.TypeName+"  Description: "+str(self.Description))        
+                Domoticz.Device(Name=self.name, Unit=self.ID, TypeName=self.TypeName,Used=self.Used,Options=self.options,Description=self.Description).Create()
             else:
-                 Domoticz.Device(Name=self.name, Unit=self.ID,Type=self.Type, Subtype=self.SubType, Switchtype=self.SwitchType, Used=self.Used,Options=self.options,Description=self.Description).Create()
-                 Domoticz.Log("adding Dev with Type, "+str(self.Type))
+                Domoticz.Device(Name=self.name, Unit=self.ID,Type=self.Type, Subtype=self.SubType, Switchtype=self.SwitchType, Used=self.Used,Options=self.options,Description=self.Description).Create()
+                Domoticz.Log("Adding device: name"+ self.name+", Type: "+str(self.Type)+" SubType: "+str(self.SubType)+" SwitchType: "+str(self.SwitchType))
                       
 
   def UpdateValue(self,RS485,outerClass):
@@ -113,18 +109,19 @@ class Dev:
                                value = RS485.read_register(self.register,self.size)
                                payload = value * self.multipler  # decimal places
                             except Exception as e:
-                               Domoticz.Log("Modbus connection failure: "+str(e))
+                               Domoticz.Log("Modbus connection failure 1: "+str(e))
                                Domoticz.Log("retry updating register in 2 s")
                                sleep(2.0)
                                continue
                             break
                     elif RS485.MyMode == 'pymodbus':
+                            Domoticz.Debug("reading for register: "+str(self.register)+" size: "+str(self.size)+" name: "+self.name + " multipler: "+str(self.multipler))
                             while True:
                                 try:
                                     value = BinaryPayloadDecoder.fromRegisters(RS485.read_holding_registers(self.register, self.size), byteorder=Endian.Big, wordorder=Endian.Big).decode_16bit_int()
                                     payload = value * self.multipler  # decimal places
                                 except Exception as e:
-                                   Domoticz.Log("Modbus connection failure: "+str(e))
+                                   Domoticz.Log("Modbus connection failure 2: "+str(e))
                                    Domoticz.Log("retry updating register in 2 s")
                                    sleep(2.0)
                                    continue
@@ -136,18 +133,22 @@ class Dev:
                            try:
                              payload = RS485.read_long(self.register)                           
                            except Exception as e:
-                               Domoticz.Log("Modbus connection failure"+str(e))
+                               Domoticz.Log("Modbus connection failure 3"+str(e))
                                Domoticz.Log("retry updating register in 2 s")
                                sleep(2.0)
                                continue
                            break
                     elif RS485.MyMode == 'pymodbus':
+                            Domoticz.Debug("reading for register: "+str(self.register)+" size: "+str(self.size)+" name: "+self.name + " multipler: "+str(self.multipler))
                             while True:
                                 try:
-                                   value = BinaryPayloadDecoder.fromRegisters(RS485.read_holding_registers(self.register, self.size), byteorder=Endian.Big, wordorder=Endian.Big).decode_32bit_int()
+#                                   RS485.open()
+                                   G = RS485.read_holding_registers(self.register, self.size)
+                                   value = BinaryPayloadDecoder.fromRegisters(G, byteorder=Endian.Big, wordorder=Endian.Big).decode_32bit_int()
                                    payload = value * self.multipler # decimal places
+                                   Domoticz.Debug("value: "+str(value)+" payload: "+str(payload)+" data: "+str(G) )
                                 except Exception as e:
-                                   Domoticz.Log("Modbus connection failure: "+str(e))
+                                   Domoticz.Log("Modbus connection failure 4: "+str(e))
                                    Domoticz.Log("retry updating register in 2 s")
                                    sleep(2.0)
                                    continue
@@ -166,48 +167,65 @@ class Dev:
                 if self.Type == 243 and (self.name == "TotalReactivePower"):
                     v=int(abs( data*1000))
                     outerClass.reactive_power.update(v)
-                if self.Type == 243 and (self.name == "RevEnergy"):
-                    v=int(data*1000)
-                    outerClass.reverse_power.update(v)
-                if self.Type == 243 and (self.name == "FwdEnergy"):
-                    v=int(data*1000)
-                    outerClass.forward_power.update(v)
+                if (self.name == "Import Energy"):
+                    v=int(data*10)
+                    outerClass.consumption=v
+                                        
+                if (self.name == "Export Energy"):
+                    v=int(data*10)
+                    outerClass.production=v
+                           
+                if self.Type == 250 and (self.name == "TotalEnergy"):
+                    USAGE1=str(0)
+                    USAGE2=str(0)
+                    RETURN1=str(0)
+                    RETURN2=str(0)
+                    CONS=str(0)
+                    PROD=str(0)
+                    DATE=str(0)
 
-                if self.Type == 250 and (self.name == "LifeEnergy"):
-# USAGE1= energy usage meter tariff 1, This is an incrementing counter
-# USAGE2= energy usage meter tariff 2, This is an incrementing counter
-# RETURN1= energy return meter tariff 1, This is an incrementing counter
-# RETURN2= energy return meter tariff 2, This is an incrementing counter
-# CONS= actual usage power (Watt)
-# PROD= actual return power (Watt)
-# DATE = date with %Y-%m-%d format (for instance 2019-09-24) to put data in last week/month/year history log, or "%Y-%m-%d %H:%M:%S" format (for instance 2019-10-03 14:00:00) to put data in last days history log
-# or
-# Devices[Unit].Update(nValue=nValue, sValue="USAGE1;USAGE2;RETURN1;RETURN2;CONS;PROD;COUNTER1;COUNTER2;COUNTER3;COUNTER4;DATE")
-                    USAGE1=str(data)
-                    CONS = str(int(outerClass.active_power.get()))
-                    Devices[self.ID].Update(1, sValue=USAGE1+"0;0;0;0;"+CONS+";0")
+                    POWER = int(outerClass.active_power.get())
+                    Domoticz.Debug("DEBUG in UpdateValue, "+self.name+" POWER: "+str(POWER))
+                    USAGE1=str(outerClass.consumption)
+                    RETURN1=str(outerClass.production)
+                    PROD = str(abs(outerClass.reverse_power.get()))
+                    CONS = str(abs(outerClass.forward_power.get()))
+                    USAGE2=RETURN2=str(0)
+                    Devices[self.ID].Update(1, sValue=USAGE1+";"+USAGE2+";"+RETURN1+";"+RETURN2+";"+CONS+";"+PROD)
+
+                    if Parameters["Mode6"] == 'Debug':
+                        Domoticz.Debug("DEBUG in UpdateValue, "+self.name+" USAGE1: "+USAGE1+" USAGE2: "+USAGE2+" RETURN1: "+RETURN1+" RETURN2: "+RETURN2+" CONS: "+CONS+" PROD: "+PROD)
+
+                    Devices[self.ID].Update(1, sValue=USAGE1+";"+USAGE2+";"+RETURN1+";"+RETURN2+";"+CONS+";"+PROD)
+                    
                 elif self.Type == 250 and (self.name == "Reserved1"):
                     if Parameters["Mode6"] == 'Debug':
                         Domoticz.Debug("DEBUG in UpdateValue "+self.name+' {0:.3f} V'.format(data))
                 elif self.Type == 250 and (self.name == "Reserved2"):
                     if Parameters["Mode6"] == 'Debug':
                         Domoticz.Debug("DEBUG in UpdateValue "+self.name+' {0:.3f} V'.format(data))
-                elif self.Type == 250 and (self.name == "ReactiveEnergy"):
+                elif self.Type == 250 and (self.name == "LifeEnergy"):
                     USAGE1=str(data)
+                    POWER = str(abs(int(outerClass.active_power.get())))
+                    CONS = POWER
+                    Devices[self.ID].Update(1, sValue=USAGE1+"0;0;0;0;"+CONS+";0")           
+                elif self.Type == 250 and (self.name == "ReactiveEnergy"):
+                    USAGE1=str(data*10)
                     CONS = str(outerClass.reactive_power.get())
                     Devices[self.ID].Update(1, sValue=USAGE1+"0;0;0;0;"+CONS+";0")
-                elif self.Type == 250 and (self.name == "RevEnergy"):
-                    USAGE1=str(data)
-                    CONS = str(outerClass.reverse_power.get())
-                    Devices[self.ID].Update(1, sValue=USAGE1+"0;0;0;0;"+CONS+";0")
-                elif self.Type == 250 and (self.name == "FwdEnergy"):
-                    USAGE1=str(data)
+                elif self.Type == 250 and (self.name == "Import Energy"):
+                    USAGE1=str(data*10)
                     CONS = str(outerClass.forward_power.get())
-                    Devices[self.ID].Update(1, sValue=USAGE1+"0;0;0;0;"+CONS+";0")
+                    USAGE2=RETURN1=RETURN2=PROD=str(0)
+                    Devices[self.ID].Update(1, sValue=USAGE1+";"+USAGE2+";"+RETURN1+";"+RETURN2+";"+CONS+";"+PROD)
+                elif self.Type == 250 and (self.name == "Export Energy"):
+                    RETURN1=str(data*10)
+                    PROD = str(abs(outerClass.reverse_power.get())) 
+                    USAGE1=USAGE2=RETURN2=CONS=str(0)
+                    Devices[self.ID].Update(1, sValue=USAGE1+";"+USAGE2+";"+RETURN1+";"+RETURN2+";"+CONS+";"+PROD)
                 else:
                     Devices[self.ID].Update(sValue=str(data),nValue=int(data))
-                if Parameters["Mode6"] == 'Debug':
-                    Domoticz.Debug("DEBUG in UpdateValue "+self.name+' {0:.3f} V'.format(data))
+          
                     
 
 
@@ -222,10 +240,21 @@ class BasePlugin:
         # Forward power for last 5 minutes
         self.forward_power=Average()
         self.reverse_power=Average()
+        self.consumption=0
+        self.production=0
         return
 
     def onStart(self):
-        Domoticz.Log("DDS238-7 Modbus plugin start, mode: "+Parameters["Mode4"])
+        if Parameters["Mode6"] == "Debug":
+           Domoticz.Debugging(1)
+           DumpConfigToLog()
+
+#           Domoticz.Log("Debugger started, use 'telnet 0.0.0.0 4444' to connect")
+           Domoticz.Debug("Debugging enabled")
+#           import rpdb
+#           rpdb.set_trace()
+
+        Domoticz.Log("DDS238-7 Modbus plugin start, mode: "+Parameters["Mode4"]+ "debug: "+Parameters["Mode6"])
         DeviceID= int(Parameters["Mode2"])
 
         if Parameters["Mode4"] == "RTU" or Parameters["Mode4"] == "ASCII":
@@ -246,51 +275,56 @@ class BasePlugin:
             Domoticz.Debug("TCP mode is not supported by minimalmodbus, so we use pymodbus instead")
             Domoticz.Debug("Using pymodbus, connecting to "+Parameters["Address"]+":"+Parameters["Port"]+" unit ID: "+ str(DeviceID))
             try: 
-                self.RS485 = ModbusClient(host=Parameters["Address"], port=int(Parameters["Port"]), unit_id=DeviceID, auto_open=True, auto_close=True, timeout=2)
+                Domoticz.Debug("Trying to connect to "+Parameters["Address"]+":"+Parameters["Port"]+" unit ID: "+ str(DeviceID))
+                self.RS485 = ModbusClient(host=Parameters["Address"], port=int(Parameters["Port"]), unit_id=int(DeviceID), auto_open=True, auto_close=True, timeout=2, debug=True)
+                self.RS485.open()
             except: 
                 Domoticz.Log("pyMmodbus connection failure")
             self.RS485.MyMode = 'pymodbus'
+            Domoticz.Debug("Using pymodbus, connected to "+Parameters["Address"]+":"+Parameters["Port"]+" unit ID: "+ str(DeviceID) + " mode: "+self.RS485.MyMode + " object: " + str(self.RS485))  
         else:
             Domoticz.Log("Unknown mode: "+Parameters["Mode4"])   
                 
         devicecreated = []
 
         self.devs = [
-                Dev(1,"LifeEnergy",1,0x00,size=2,functioncode=3,Type=250,SubType=1,Description="Total energy consumption"),
-                Dev(2,"Reserved1",1,0x02,size=2,functioncode=3,Type=250,SubType=1,Description="Reserved1"),
-                Dev(3,"ReactiveEnergy",1,0x04,size=2,functioncode=3,options={"Custom":"1;kVArh"},Type=250,SubType=6,Description="Reactive energy"), # "Custom":"1;kVArh
-                Dev(4,"Reserved2",1,0x06,size=2,functioncode=3,Type=250,SubType=1,Description="Reserved2"),
-                Dev(5,"RevEnergy",1,0x08,size=2,functioncode=3,Type=250,SubType=1,Description="Reverse energy"),
-                Dev(6,"FwdEnergy",1,0xA,size=2,functioncode=3,Type=250,SubType=1,Description="Forward energy"),
-                Dev(7,"Voltage Frequency",0.01,0x11,size=1,functioncode=3,options={"Custom":"1;Hz"},Type=243,SubType=31,Description="Voltage Frequency"),
+                Dev(1,"TotalEnergy",10,0x00,size=2,functioncode=3,Type=250,SubType=1,Description="Total energy balance"),
+                Dev(2,"LifeEnergy",1,0x00,size=2,functioncode=3,Type=250,SubType=1,Description="Total energy flow"),
+                Dev(3,"Reserved1",1,0x02,size=2,functioncode=3,Used=0,Type=250,SubType=1,Description="Reserved1"),
+                Dev(4,"ReactiveEnergy",1,0x04,size=2,functioncode=3,options={"Custom":"1;kVArh"},Type=250,SubType=6,Description="Reactive energy"), # "Custom":"1;kVArh
+                Dev(5,"Reserved2",1,0x06,size=2,functioncode=3,Used=0,Type=250,SubType=1,Description="Reserved2"),
+                Dev(6,"Import Energy",1,0x08,size=2,functioncode=3,Type=250,SubType=1,Description="Reverse energy"),
+                Dev(7,"Export Energy",1,0xA,size=2,functioncode=3,Type=250,SubType=1,Description="Forward energy"),
+                Dev(8,"Voltage Frequency",0.01,0x11,size=1,functioncode=3,options={"Custom":"1;Hz"},Type=243,SubType=31,Description="Voltage Frequency"),
              
-                Dev(8,"Voltage_L1",0.1,0x80,size=1,functioncode=3,Type=243,SubType=8,Description="Voltage L1"),
-                Dev(9,"Voltage_L2",0.1,0x81,size=1,functioncode=3,Type=243,SubType=8,Description="Voltage L2"),
-                Dev(10,"Voltage_L3",0.1,0x82,size=1,functioncode=3,Type=243,SubType=8,Description="Voltage L3"),
+                Dev(9,"Voltage_L1",0.1,0x80,size=1,functioncode=3,Type=243,SubType=8,Description="Voltage L1"),
+                Dev(10,"Voltage_L2",0.1,0x81,size=1,functioncode=3,Type=243,SubType=8,Description="Voltage L2"),
+                Dev(11,"Voltage_L3",0.1,0x82,size=1,functioncode=3,Type=243,SubType=8,Description="Voltage L3"),
              
-                Dev(11,"Current_L1",0.01,0x83,size=1,functioncode=3,Type=243,SubType=23,Description="Current L1"),
-                Dev(12,"Current_L2",0.01,0x84,size=1,functioncode=3,Type=243,SubType=23,Description="Current L2"),
-                Dev(13,"Current_L3",0.01,0x85,size=1,functioncode=3,Type=243,SubType=23,Description="Current L3"),
+                Dev(12,"Current_L1",0.01,0x83,size=1,functioncode=3,Type=243,SubType=23,Description="Current L1"),
+                Dev(13,"Current_L2",0.01,0x84,size=1,functioncode=3,Type=243,SubType=23,Description="Current L2"),
+                Dev(14,"Current_L3",0.01,0x85,size=1,functioncode=3,Type=243,SubType=23,Description="Current L3"),
            
-                Dev(14,"TotalActivePower",1,0x86,size=2,functioncode=3,options={"Custom":"1;W"},Type=243,SubType=31,signed=True, Description="Total active power"),
-                Dev(15,"ActivePower_L1",1,0x88,size=1,functioncode=3,options={"Custom":"1;W"},Type=243,SubType=31,signed=True,Description="Active power L1"),
-                Dev(16,"ActivePower_L2",1,0x89,size=1,functioncode=3,options={"Custom":"1;W"},Type=243,SubType=31,signed=True,Description="Active power L2"),
-                Dev(17,"ActivePower_L3",1,0x8A,size=1,functioncode=3,options={"Custom":"1;W"},Type=243,SubType=31,signed=True,Description="Active power L3"),
+                Dev(15,"TotalActivePower",1,0x86,size=2,functioncode=3,options={"Custom":"1;W"},Type=243,SubType=31,signed=True, Description="Total active power"),
+                Dev(16,"ActivePower_L1",1,0x88,size=1,functioncode=3,options={"Custom":"1;W"},Type=243,SubType=31,signed=True,Description="Active power L1"),
+                Dev(17,"ActivePower_L2",1,0x89,size=1,functioncode=3,options={"Custom":"1;W"},Type=243,SubType=31,signed=True,Description="Active power L2"),
+                Dev(18,"ActivePower_L3",1,0x8A,size=1,functioncode=3,options={"Custom":"1;W"},Type=243,SubType=31,signed=True,Description="Active power L3"),
            
-                Dev(18,"TotalReactivePower",0.001,0x8B,size=2,functioncode=3,options={"Custom":"1;kVAr"},Type=243,SubType=31,signed=True,Description="Total reactive power"), # "Custom":"1;kVAr
-                Dev(19,"ReactivePower_L1",0.001,0x8D,size=1,functioncode=3,options={"Custom":"1;kVAr"},Type=243,SubType=31,signed=True,Description="Reactive power L1"), # "Custom":"1;kVAr
-                Dev(20,"ReactivePower_L2",0.001,0x8E,size=1,functioncode=3,options={"Custom":"1;kVAr"},Type=243,SubType=31,signed=True,Description="Reactive power L2"), # "Custom":"1;kVAr
-                Dev(21,"ReactivePower_L3",0.001,0x8F,size=1,functioncode=3,options={"Custom":"1;kVAr"},Type=243,SubType=31,signed=True,Description="Reactive power L3"), # "Custom":"1;kVAr
+                Dev(19,"TotalReactivePower",0.001,0x8B,size=2,functioncode=3,options={"Custom":"1;kVAr"},Type=243,SubType=31,signed=True,Description="Total reactive power"), # "Custom":"1;kVAr
+                Dev(20,"ReactivePower_L1",0.001,0x8D,size=1,functioncode=3,options={"Custom":"1;kVAr"},Type=243,SubType=31,signed=True,Description="Reactive power L1"), # "Custom":"1;kVAr
+                Dev(21,"ReactivePower_L2",0.001,0x8E,size=1,functioncode=3,options={"Custom":"1;kVAr"},Type=243,SubType=31,signed=True,Description="Reactive power L2"), # "Custom":"1;kVAr
+                Dev(22,"ReactivePower_L3",0.001,0x8F,size=1,functioncode=3,options={"Custom":"1;kVAr"},Type=243,SubType=31,signed=True,Description="Reactive power L3"), # "Custom":"1;kVAr
            
-                Dev(22,"TotalApparentPower",0.001,0x90,size=2,functioncode=3,options={"Custom":"1;kVA"},Type=243,SubType=31,Description="Total apparent power"), # "Custom":"1;kVA
-                Dev(23,"ApparentPower_L1",0.001,0x92,size=1,functioncode=3,options={"Custom":"1;kVA"},Type=243,SubType=31,Description="Apparent power L1"), # "Custom":"1;kVA
-                Dev(24,"ApparentPower_L2",0.001,0x93,size=1,functioncode=3,options={"Custom":"1;kVA"},Type=243,SubType=31,Description="Apparent power L2"), # "Custom":"1;kVA
-                Dev(25,"ApparentPower_L3",0.001,0x94,size=1,functioncode=3,options={"Custom":"1;kVA"},Type=243,SubType=31,Description="Apparent power L3"), # "Custom":"1;kVA
+                Dev(23,"TotalApparentPower",0.001,0x90,size=2,functioncode=3,options={"Custom":"1;kVA"},Type=243,SubType=31,Description="Total apparent power"), # "Custom":"1;kVA
+                Dev(24,"ApparentPower_L1",0.001,0x92,size=1,functioncode=3,options={"Custom":"1;kVA"},Type=243,SubType=31,Description="Apparent power L1"), # "Custom":"1;kVA
+                Dev(25,"ApparentPower_L2",0.001,0x93,size=1,functioncode=3,options={"Custom":"1;kVA"},Type=243,SubType=31,Description="Apparent power L2"), # "Custom":"1;kVA
+                Dev(26,"ApparentPower_L3",0.001,0x94,size=1,functioncode=3,options={"Custom":"1;kVA"},Type=243,SubType=31,Description="Apparent power L3"), # "Custom":"1;kVA
            
-                Dev(26,"PowerFactor",0.001,0x95,size=1,functioncode=3,Type=243,SubType=31,Description="Power factor"),
-                Dev(27,"PowerFactor_L1",0.001,0x96,size=1,functioncode=3,Type=243,SubType=31,Description="Power factor L1"),
-                Dev(28,"PowerFactor_L2",0.001,0x97,size=1,functioncode=3,Type=243,SubType=31,Description="Power factor L2"),
-                Dev(29,"PowerFactor_L3",0.001,0x98,size=1,functioncode=3,Type=243,SubType=31,Description="Power factor L3")
+                Dev(27,"PowerFactor",0.001,0x95,size=1,functioncode=3,Type=243,SubType=31,Description="Power factor"),
+                Dev(28,"PowerFactor_L1",0.001,0x96,size=1,functioncode=3,Type=243,SubType=31,Description="Power factor L1"),
+                Dev(29,"PowerFactor_L2",0.001,0x97,size=1,functioncode=3,Type=243,SubType=31,Description="Power factor L2"),
+                Dev(30,"PowerFactor_L3",0.001,0x98,size=1,functioncode=3,Type=243,SubType=31,Description="Power factor L3")
+
                 ]
                 
     def onStop(self):
@@ -307,7 +341,7 @@ class BasePlugin:
                             Domoticz.Debug("Getting data from modbus for device:"+i.name+" ID:"+str(i.ID))
                         self.devs[i.ID-1].UpdateValue(self.RS485,pluginClass)
                 except Exception as e:
-                        Domoticz.Log("Connection failure: "+str(e));
+                        Domoticz.Log("Connection failure: "+str(e))
                 else:
                     if Parameters["Mode6"] == 'Debug':
                             Domoticz.Debug("in HeartBeat "+i.name+": "+format(i.value))
