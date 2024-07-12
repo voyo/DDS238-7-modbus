@@ -118,7 +118,7 @@ class Dev:
                             Domoticz.Debug("reading for register: "+str(self.register)+" size: "+str(self.size)+" name: "+self.name + " multipler: "+str(self.multipler))
                             while True:
                                 try:
-                                    value = BinaryPayloadDecoder.fromRegisters(RS485.read_holding_registers(self.register, self.size), byteorder=Endian.Big, wordorder=Endian.Big).decode_16bit_int()
+                                    value = BinaryPayloadDecoder.fromRegisters(RS485.read_holding_registers(self.register, self.size), byteorder=Endian.BIG, wordorder=Endian.BIG).decode_16bit_int()
                                     payload = value * self.multipler  # decimal places
                                 except Exception as e:
                                    Domoticz.Log("Modbus connection failure 2: "+str(e))
@@ -144,7 +144,7 @@ class Dev:
                                 try:
 #                                   RS485.open()
                                    G = RS485.read_holding_registers(self.register, self.size)
-                                   value = BinaryPayloadDecoder.fromRegisters(G, byteorder=Endian.Big, wordorder=Endian.Big).decode_32bit_int()
+                                   value = BinaryPayloadDecoder.fromRegisters(G, byteorder=Endian.BIG, wordorder=Endian.BIG).decode_32bit_int()
                                    payload = value * self.multipler # decimal places
                                    Domoticz.Debug("value: "+str(value)+" payload: "+str(payload)+" data: "+str(G) )
                                 except Exception as e:
