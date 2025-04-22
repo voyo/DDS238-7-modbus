@@ -243,12 +243,20 @@ class BasePlugin:
                 elif Parameters["Mode4"] == "ASCII":
                     self.RS485.mode = minimalmodbus.MODE_ASCII  
         elif Parameters["Mode4"] == "TCP":
-            Domoticz.Debug("TCP mode is not supported by minimalmodbus, so we use pymodbus instead")
             Domoticz.Debug("Using pymodbus, connecting to "+Parameters["Address"]+":"+Parameters["Port"]+" unit ID: "+ str(DeviceID))
             try: 
-                self.RS485 = ModbusClient(host=Parameters["Address"], port=int(Parameters["Port"]), unit_id=DeviceID, auto_open=True, auto_close=True, timeout=2)
+                self.RS485 = ModbusClient(
+                    host=Parameters["Address"], 
+                    port=int(Parameters["Port"]), 
+                    unit_id=DeviceID, 
+                    auto_open=True, 
+                    auto_close=False,  # Keep connection open
+                    timeout=2,
+                    reconnect=True,    # Enable reconnection
+                    retry_on_empty=True
+                )
             except: 
-                Domoticz.Log("pyMmodbus connection failure")
+                Domoticz.Log("pyModbus connection failure")
             self.RS485.MyMode = 'pymodbus'
         else:
             Domoticz.Log("Unknown mode: "+Parameters["Mode4"])   
@@ -351,3 +359,141 @@ def DumpConfigToLog():
         Domoticz.Debug("Device sValue:   '" + Devices[x].sValue + "'")
         Domoticz.Debug("Device LastLevel: " + str(Devices[x].LastLevel))
     return
+
+def is_value_reasonable(value, register_name):
+    """
+    Check if value is within reasonable range for given register type.
+    Returns (bool, str) - (is_valid, reason_if_invalid)
+    """
+    # Define reasonable ranges for each register type
+    valid_ranges = {
+        # Voltage should be between 180-260V for normal grid power
+        "Voltage": (170, 270),
+        "Voltage_L1": (170, 270),
+        "Voltage_L2": (170, 270),
+        "Voltage_L3": (170, 270),
+        
+        # Current depends on your installation, adjust as needed
+        "Current": (0, 100),  # 0-100A
+        "Current_L1": (0, 100),
+        "Current_L2": (0, 100),
+        "Current_L3": (0, 100),
+        
+        # Power Factor should be between 0 and 1
+        "PowerFactor": (0, 1),
+        "PowerFactor_L1": (0, 1),
+        "PowerFactor_L2": (0, 1),
+        "PowerFactor_L3": (0, 1),
+        
+        # Frequency should be close to 50Hz (or 60Hz depending on your region)
+        "Frequency": (45, 55),  # Adjust to (55, 65) for 60Hz systems
+        
+        # Power readings (in Watts)
+        "TotalActivePower": (-25000, 25000),  # ±25kW, adjust based on your installation
+        "ActivePower_L1": (-25000, 25000),
+        "ActivePower_L2": (-25000, 25000),
+        "ActivePower_L3": (-25000, 25000),
+        
+        # Energy readings (always positive)
+        "TotalActiveEnergy": (0, 999999),
+        "ForwardActiveEnergy": (0, 999999),
+        "ReverseActiveEnergy": (0, 999999),
+        
+        # Reactive Power
+        "TotalReactivePower": (-25000, 25000),
+        "ReactivePower_L1": (-25000, 25000),
+        "ReactivePower_L2": (-25000, 25000),
+        "ReactivePower_L3": (-25000, 25000),
+    }
+
+    # If we don't have defined ranges for this register, log a warning
+    if register_name not in valid_ranges:
+        return False, f"No validation range defined for register {register_name}"
+    
+    # Check if value is None or not a number
+    if value is None or not isinstance(value, (int, float)):
+        return False, f"Invalid value type for {register_name}: {type(value)}"
+    
+    min_val, max_val = valid_ranges[register_name]
+    
+    if value < min_val or value > max_val:
+        return False, f"Value {value} for {register_name} is outside valid range [{min_val}, {max_val}]"
+    
+    return True, "OK"
+
+# Modify your UpdateValue method:
+def UpdateValue(self, RS485, outerClass):
+    try:
+        # Your existing code to read from Modbus
+        if self.size == 1:
+            if RS485.MyMode == 'pymodbus':
+                while True:
+                    try:
+                        value = BinaryPayloadDecoder.fromRegisters(
+                            RS485.read_holding_registers(self.register, self.size),
+                            byteorder=Endian.Big,
+                            wordorder=Endian.Big
+                        ).decode_16bit_int()
+                        
+                        payload = value * self.multipler  # decimal places
+                        
+                        # Validate the value
+                        is_valid, reason = is_value_reasonable(payload, self.name)
+                        
+                        if not is_valid:
+                            Domoticz.Log(f"Rejecting invalid value: {reason}")
+                            return  # Skip updating Domoticz
+                            
+                    except Exception as e:
+                        Domoticz.Log("Modbus connection failure: "+str(e))
+                        Domoticz.Log("retry updating register in 2 s")
+                        sleep(2.0)
+                        continue
+                    break
+                    
+        elif self.size == 2:
+            # Similar validation for 32-bit values
+            if RS485.MyMode == 'pymodbus':
+                while True:
+                    try:
+                        value = BinaryPayloadDecoder.fromRegisters(
+                            RS485.read_holding_registers(self.register, self.size),
+                            byteorder=Endian.Big,
+                            wordorder=Endian.Big
+                        ).decode_32bit_int()
+                        
+                        payload = value * self.multipler
+                        
+                        # Validate the value
+                        is_valid, reason = is_value_reasonable(payload, self.name)
+                        
+                        if not is_valid:
+                            Domoticz.Log(f"Rejecting invalid value: {reason}")
+                            return  # Skip updating Domoticz
+                            
+                    except Exception as e:
+                        Domoticz.Log("Modbus connection failure: "+str(e))
+                        Domoticz.Log("retry updating register in 2 s")
+                        sleep(2.0)
+                        continue
+                    break
+
+        # If we get here, the value is valid
+        data = payload
+        
+        # Add debug logging
+        if Parameters["Mode6"] == 'Debug':
+            Domoticz.Debug(f"Valid value for {self.name}: {data} (raw: {value}, multiplier: {self.multipler})")
+        
+        # Your existing code for updating Domoticz
+        if self.Type == 243 and (self.name == "TotalActivePower"):
+            outerClass.active_power.update(int(data))
+            if data < 0:
+                outerClass.reverse_power.update(int(data))
+                outerClass.forward_power.update(0)
+            else:
+                outerClass.reverse_power.update(0)
+                outerClass.forward_power.update(int(data))
+                
+    except Exception as e:
+        Domoticz.Error(f"Error updating value for {self.name}: {str(e)}")
