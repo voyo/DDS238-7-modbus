@@ -107,15 +107,11 @@ class Dev:
             if RS485.MyMode == 'pymodbus':
                 while True:
                     try:
-                        # Read the registers
+                        # Read the registers - returns a list directly
                         registers = RS485.read_holding_registers(self.register, self.size)
-                        if registers and not registers.isError():
-                            # Convert using the new method
-                            value = RS485.convert_from_registers(
-                                registers.registers,
-                                data_type=RS485.DATATYPE.INT16,  # For 16-bit integers
-                                word_order='big'
-                            )
+                        if registers is not None:  # Check if we got a valid response
+                            # Convert the value - no need for .registers since it's already a list
+                            value = registers[0]  # For size=1, we only have one register
                             payload = value * self.multipler  # decimal places
                             
                             # Validate the value
@@ -123,7 +119,6 @@ class Dev:
                             if not is_valid:
                                 Domoticz.Log(f"Rejecting invalid value: {reason}")
                                 return
-                                
                         else:
                             raise Exception("Failed to read registers")
                             
@@ -140,13 +135,9 @@ class Dev:
                     try:
                         # Read the registers
                         registers = RS485.read_holding_registers(self.register, self.size)
-                        if registers and not registers.isError():
-                            # Convert using the new method
-                            value = RS485.convert_from_registers(
-                                registers.registers,
-                                data_type=RS485.DATATYPE.INT32,  # For 32-bit integers
-                                word_order='big'
-                            )
+                        if registers is not None:
+                            # For 32-bit values, combine two 16-bit registers
+                            value = (registers[0] << 16) + registers[1]
                             payload = value * self.multipler
                             
                             # Validate the value
@@ -154,7 +145,6 @@ class Dev:
                             if not is_valid:
                                 Domoticz.Log(f"Rejecting invalid value: {reason}")
                                 return
-                                
                         else:
                             raise Exception("Failed to read registers")
                             
