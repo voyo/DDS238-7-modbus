@@ -234,14 +234,13 @@ class BasePlugin:
         self.runInterval = 1
         self.RS485 = ""
         # Active power for last 5 minutes
-        self.active_power=Average()
+        self.active_power = Average()
         # Reactive power for last 5 minutes
-        self.reactive_power=Average()
+        self.reactive_power = Average()
         # Forward power for last 5 minutes
-        self.forward_power=Average()
-        self.reverse_power=Average()
-        self.consumption=0
-        self.production=0
+        self.forward_power = Average()
+        self.reverse_power = Average()
+        self.devs = []  # Initialize empty device list
         return
 
     def onStart(self):
