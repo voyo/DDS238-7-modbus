@@ -101,132 +101,89 @@ class Dev:
                 Domoticz.Log("Adding device: name"+ self.name+", Type: "+str(self.Type)+" SubType: "+str(self.SubType)+" SwitchType: "+str(self.SwitchType))
                       
 
-  def UpdateValue(self,RS485,outerClass):
-                if self.size == 1:
-                    if RS485.MyMode == 'minimalmodbus':
-                        while True:
-                            try:
-                               value = RS485.read_register(self.register,self.size)
-                               payload = value * self.multipler  # decimal places
-                            except Exception as e:
-                               Domoticz.Log("Modbus connection failure 1: "+str(e))
-                               Domoticz.Log("retry updating register in 2 s")
-                               sleep(2.0)
-                               continue
-                            break
-                    elif RS485.MyMode == 'pymodbus':
-                            Domoticz.Debug("reading for register: "+str(self.register)+" size: "+str(self.size)+" name: "+self.name + " multipler: "+str(self.multipler))
-                            while True:
-                                try:
-                                    value = BinaryPayloadDecoder.fromRegisters(RS485.read_holding_registers(self.register, self.size), byteorder=Endian.BIG, wordorder=Endian.BIG).decode_16bit_int()
-                                    payload = value * self.multipler  # decimal places
-                                except Exception as e:
-                                   Domoticz.Log("Modbus connection failure 2: "+str(e))
-                                   Domoticz.Log("retry updating register in 2 s")
-                                   sleep(2.0)
-                                   continue
-                                break
+  def UpdateValue(self, RS485, outerClass):
+    try:
+        if self.size == 1:
+            if RS485.MyMode == 'pymodbus':
+                while True:
+                    try:
+                        # Read the registers
+                        registers = RS485.read_holding_registers(self.register, self.size)
+                        if registers and not registers.isError():
+                            # Convert using the new method
+                            value = RS485.convert_from_registers(
+                                registers.registers,
+                                data_type=RS485.DATATYPE.INT16,  # For 16-bit integers
+                                word_order='big'
+                            )
+                            payload = value * self.multipler  # decimal places
                             
-                elif self.size == 2:
-                    if RS485.MyMode == 'minimalmodbus':
-                         while True:
-                           try:
-                             payload = RS485.read_long(self.register)                           
-                           except Exception as e:
-                               Domoticz.Log("Modbus connection failure 3"+str(e))
-                               Domoticz.Log("retry updating register in 2 s")
-                               sleep(2.0)
-                               continue
-                           break
-                    elif RS485.MyMode == 'pymodbus':
-                            Domoticz.Debug("reading for register: "+str(self.register)+" size: "+str(self.size)+" name: "+self.name + " multipler: "+str(self.multipler))
-                            while True:
-                                try:
-#                                   RS485.open()
-                                   G = RS485.read_holding_registers(self.register, self.size)
-                                   value = BinaryPayloadDecoder.fromRegisters(G, byteorder=Endian.BIG, wordorder=Endian.BIG).decode_32bit_int()
-                                   payload = value * self.multipler # decimal places
-                                   Domoticz.Debug("value: "+str(value)+" payload: "+str(payload)+" data: "+str(G) )
-                                except Exception as e:
-                                   Domoticz.Log("Modbus connection failure 4: "+str(e))
-                                   Domoticz.Log("retry updating register in 2 s")
-                                   sleep(2.0)
-                                   continue
-                                break
-                data = payload
-                if self.Type == 243 and (self.name == "TotalActivePower"):
-                    outerClass.active_power.update(int(data))
-                    if data < 0:
-                        outerClass.reverse_power.update(int(data))
-                        outerClass.forward_power.update(0)
-                    else:
-                        outerClass.reverse_power.update(0)
-                        outerClass.forward_power.update(int(data))
-
-
-                if self.Type == 243 and (self.name == "TotalReactivePower"):
-                    v=int(abs( data*1000))
-                    outerClass.reactive_power.update(v)
-                if (self.name == "Import Energy"):
-                    v=int(data*10)
-                    outerClass.consumption=v
-                                        
-                if (self.name == "Export Energy"):
-                    v=int(data*10)
-                    outerClass.production=v
-                           
-                if self.Type == 250 and (self.name == "TotalEnergy"):
-                    USAGE1=str(0)
-                    USAGE2=str(0)
-                    RETURN1=str(0)
-                    RETURN2=str(0)
-                    CONS=str(0)
-                    PROD=str(0)
-                    DATE=str(0)
-
-                    POWER = int(outerClass.active_power.get())
-                    Domoticz.Debug("DEBUG in UpdateValue, "+self.name+" POWER: "+str(POWER))
-                    USAGE1=str(outerClass.consumption)
-                    RETURN1=str(outerClass.production)
-                    PROD = str(abs(outerClass.reverse_power.get()))
-                    CONS = str(abs(outerClass.forward_power.get()))
-                    USAGE2=RETURN2=str(0)
-                    Devices[self.ID].Update(1, sValue=USAGE1+";"+USAGE2+";"+RETURN1+";"+RETURN2+";"+CONS+";"+PROD)
-
-                    if Parameters["Mode6"] == 'Debug':
-                        Domoticz.Debug("DEBUG in UpdateValue, "+self.name+" USAGE1: "+USAGE1+" USAGE2: "+USAGE2+" RETURN1: "+RETURN1+" RETURN2: "+RETURN2+" CONS: "+CONS+" PROD: "+PROD)
-
-                    Devices[self.ID].Update(1, sValue=USAGE1+";"+USAGE2+";"+RETURN1+";"+RETURN2+";"+CONS+";"+PROD)
+                            # Validate the value
+                            is_valid, reason = is_value_reasonable(payload, self.name)
+                            if not is_valid:
+                                Domoticz.Log(f"Rejecting invalid value: {reason}")
+                                return
+                                
+                        else:
+                            raise Exception("Failed to read registers")
+                            
+                    except Exception as e:
+                        Domoticz.Log("Modbus connection failure: "+str(e))
+                        Domoticz.Log("retry updating register in 2 s")
+                        sleep(2.0)
+                        continue
+                    break
                     
-                elif self.Type == 250 and (self.name == "Reserved1"):
-                    if Parameters["Mode6"] == 'Debug':
-                        Domoticz.Debug("DEBUG in UpdateValue "+self.name+' {0:.3f} V'.format(data))
-                elif self.Type == 250 and (self.name == "Reserved2"):
-                    if Parameters["Mode6"] == 'Debug':
-                        Domoticz.Debug("DEBUG in UpdateValue "+self.name+' {0:.3f} V'.format(data))
-                elif self.Type == 250 and (self.name == "LifeEnergy"):
-                    USAGE1=str(data)
-                    POWER = str(abs(int(outerClass.active_power.get())))
-                    CONS = POWER
-                    Devices[self.ID].Update(1, sValue=USAGE1+"0;0;0;0;"+CONS+";0")           
-                elif self.Type == 250 and (self.name == "ReactiveEnergy"):
-                    USAGE1=str(data*10)
-                    CONS = str(outerClass.reactive_power.get())
-                    Devices[self.ID].Update(1, sValue=USAGE1+"0;0;0;0;"+CONS+";0")
-                elif self.Type == 250 and (self.name == "Import Energy"):
-                    USAGE1=str(data*10)
-                    CONS = str(outerClass.forward_power.get())
-                    USAGE2=RETURN1=RETURN2=PROD=str(0)
-                    Devices[self.ID].Update(1, sValue=USAGE1+";"+USAGE2+";"+RETURN1+";"+RETURN2+";"+CONS+";"+PROD)
-                elif self.Type == 250 and (self.name == "Export Energy"):
-                    RETURN1=str(data*10)
-                    PROD = str(abs(outerClass.reverse_power.get())) 
-                    USAGE1=USAGE2=RETURN2=CONS=str(0)
-                    Devices[self.ID].Update(1, sValue=USAGE1+";"+USAGE2+";"+RETURN1+";"+RETURN2+";"+CONS+";"+PROD)
-                else:
-                    Devices[self.ID].Update(sValue=str(data),nValue=int(data))
-          
-                    
+        elif self.size == 2:
+            if RS485.MyMode == 'pymodbus':
+                while True:
+                    try:
+                        # Read the registers
+                        registers = RS485.read_holding_registers(self.register, self.size)
+                        if registers and not registers.isError():
+                            # Convert using the new method
+                            value = RS485.convert_from_registers(
+                                registers.registers,
+                                data_type=RS485.DATATYPE.INT32,  # For 32-bit integers
+                                word_order='big'
+                            )
+                            payload = value * self.multipler
+                            
+                            # Validate the value
+                            is_valid, reason = is_value_reasonable(payload, self.name)
+                            if not is_valid:
+                                Domoticz.Log(f"Rejecting invalid value: {reason}")
+                                return
+                                
+                        else:
+                            raise Exception("Failed to read registers")
+                            
+                    except Exception as e:
+                        Domoticz.Log("Modbus connection failure: "+str(e))
+                        Domoticz.Log("retry updating register in 2 s")
+                        sleep(2.0)
+                        continue
+                    break
+
+        # If we get here, the value is valid
+        data = payload
+        
+        # Add debug logging
+        if Parameters["Mode6"] == 'Debug':
+            Domoticz.Debug(f"Valid value for {self.name}: {data} (raw: {value}, multiplier: {self.multipler})")
+        
+        # Update Domoticz
+        if self.Type == 243 and (self.name == "TotalActivePower"):
+            outerClass.active_power.update(int(data))
+            if data < 0:
+                outerClass.reverse_power.update(int(data))
+                outerClass.forward_power.update(0)
+            else:
+                outerClass.reverse_power.update(0)
+                outerClass.forward_power.update(int(data))
+                
+    except Exception as e:
+        Domoticz.Error(f"Error updating value for {self.name}: {str(e)}")
 
 
 class BasePlugin:
@@ -280,8 +237,9 @@ class BasePlugin:
                     auto_open=True, 
                     auto_close=False,  # Keep connection open
                     timeout=2,
-                    reconnect=True,    # Enable reconnection
-                    retry_on_empty=True
+                    retry_on_empty=True,
+                    retries=3,         # Number of retries
+                    reconnect_delay=1  # Delay between reconnection attempts
                 )
                 # Only set MyMode if connection was successful
                 if self.RS485:
@@ -458,80 +416,3 @@ def is_value_reasonable(value, register_name):
         return False, f"Value {value} for {register_name} is outside valid range [{min_val}, {max_val}]"
     
     return True, "OK"
-
-# Modify your UpdateValue method:
-def UpdateValue(self, RS485, outerClass):
-    try:
-        # Your existing code to read from Modbus
-        if self.size == 1:
-            if RS485.MyMode == 'pymodbus':
-                while True:
-                    try:
-                        value = BinaryPayloadDecoder.fromRegisters(
-                            RS485.read_holding_registers(self.register, self.size),
-                            byteorder=Endian.Big,
-                            wordorder=Endian.Big
-                        ).decode_16bit_int()
-                        
-                        payload = value * self.multipler  # decimal places
-                        
-                        # Validate the value
-                        is_valid, reason = is_value_reasonable(payload, self.name)
-                        
-                        if not is_valid:
-                            Domoticz.Log(f"Rejecting invalid value: {reason}")
-                            return  # Skip updating Domoticz
-                            
-                    except Exception as e:
-                        Domoticz.Log("Modbus connection failure: "+str(e))
-                        Domoticz.Log("retry updating register in 2 s")
-                        sleep(2.0)
-                        continue
-                    break
-                    
-        elif self.size == 2:
-            # Similar validation for 32-bit values
-            if RS485.MyMode == 'pymodbus':
-                while True:
-                    try:
-                        value = BinaryPayloadDecoder.fromRegisters(
-                            RS485.read_holding_registers(self.register, self.size),
-                            byteorder=Endian.Big,
-                            wordorder=Endian.Big
-                        ).decode_32bit_int()
-                        
-                        payload = value * self.multipler
-                        
-                        # Validate the value
-                        is_valid, reason = is_value_reasonable(payload, self.name)
-                        
-                        if not is_valid:
-                            Domoticz.Log(f"Rejecting invalid value: {reason}")
-                            return  # Skip updating Domoticz
-                            
-                    except Exception as e:
-                        Domoticz.Log("Modbus connection failure: "+str(e))
-                        Domoticz.Log("retry updating register in 2 s")
-                        sleep(2.0)
-                        continue
-                    break
-
-        # If we get here, the value is valid
-        data = payload
-        
-        # Add debug logging
-        if Parameters["Mode6"] == 'Debug':
-            Domoticz.Debug(f"Valid value for {self.name}: {data} (raw: {value}, multiplier: {self.multipler})")
-        
-        # Your existing code for updating Domoticz
-        if self.Type == 243 and (self.name == "TotalActivePower"):
-            outerClass.active_power.update(int(data))
-            if data < 0:
-                outerClass.reverse_power.update(int(data))
-                outerClass.forward_power.update(0)
-            else:
-                outerClass.reverse_power.update(0)
-                outerClass.forward_power.update(int(data))
-                
-    except Exception as e:
-        Domoticz.Error(f"Error updating value for {self.name}: {str(e)}")
