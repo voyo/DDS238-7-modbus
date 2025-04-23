@@ -234,10 +234,7 @@ class BasePlugin:
                     host=Parameters["Address"], 
                     port=int(Parameters["Port"]), 
                     unit_id=DeviceID, 
-                    auto_open=True, 
-                    auto_close=False,  # Keep connection open
-                    timeout=2,
-                    retries=3         # Number of retries
+                    timeout=2
                 )
                 # Only set MyMode if connection was successful
                 if self.RS485:
