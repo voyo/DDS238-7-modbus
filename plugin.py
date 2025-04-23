@@ -103,11 +103,7 @@ class Dev:
 
   def UpdateValue(self, RS485, outerClass):
     try:
-        if not RS485.is_connected():
-            RS485.connect()
-            if not RS485.is_connected():
-                raise Exception("Failed to connect to Modbus device")
-
+        # Try to read registers directly - pyModbusTCP will attempt to connect if needed
         if self.size == 1:
             registers = RS485.read_holding_registers(self.register, self.size)
             if registers is None or len(registers) == 0:
@@ -146,14 +142,13 @@ class Dev:
                     outerClass.reverse_power.update(0)
                     outerClass.forward_power.update(int(payload))
             elif "Voltage" in self.name:
-                # Update voltage device
                 outerClass.voltage.update(int(payload))
             elif "Current" in self.name:
-                # Update current device
                 outerClass.current.update(int(payload))
             elif "ApparentPower" in self.name:
-                # Update apparent power device
                 outerClass.apparent_power.update(int(payload))
+            elif "TotalEnergy" in self.name:
+                outerClass.total_energy.update(int(payload))
             # Add other device updates as needed
         
         Domoticz.Log(f"Successfully updated {self.name}: {payload}")
