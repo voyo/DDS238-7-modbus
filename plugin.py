@@ -103,77 +103,65 @@ class Dev:
 
   def UpdateValue(self, RS485, outerClass):
     try:
-        if self.size == 1:
-            if RS485.MyMode == 'pymodbus':
-                while True:
-                    try:
-                        # Read the registers - returns a list directly
-                        registers = RS485.read_holding_registers(self.register, self.size)
-                        if registers is not None:  # Check if we got a valid response
-                            # Convert the value - no need for .registers since it's already a list
-                            value = registers[0]  # For size=1, we only have one register
-                            payload = value * self.multipler  # decimal places
-                            
-                            # Validate the value
-                            is_valid, reason = is_value_reasonable(payload, self.name)
-                            if not is_valid:
-                                Domoticz.Log(f"Rejecting invalid value: {reason}")
-                                return
-                        else:
-                            raise Exception("Failed to read registers")
-                            
-                    except Exception as e:
-                        Domoticz.Log("Modbus connection failure: "+str(e))
-                        Domoticz.Log("retry updating register in 2 s")
-                        sleep(2.0)
-                        continue
-                    break
-                    
-        elif self.size == 2:
-            if RS485.MyMode == 'pymodbus':
-                while True:
-                    try:
-                        # Read the registers
-                        registers = RS485.read_holding_registers(self.register, self.size)
-                        if registers is not None:
-                            # For 32-bit values, combine two 16-bit registers
-                            value = (registers[0] << 16) + registers[1]
-                            payload = value * self.multipler
-                            
-                            # Validate the value
-                            is_valid, reason = is_value_reasonable(payload, self.name)
-                            if not is_valid:
-                                Domoticz.Log(f"Rejecting invalid value: {reason}")
-                                return
-                        else:
-                            raise Exception("Failed to read registers")
-                            
-                    except Exception as e:
-                        Domoticz.Log("Modbus connection failure: "+str(e))
-                        Domoticz.Log("retry updating register in 2 s")
-                        sleep(2.0)
-                        continue
-                    break
+        if not RS485.is_connected():
+            RS485.connect()
+            if not RS485.is_connected():
+                raise Exception("Failed to connect to Modbus device")
 
-        # If we get here, the value is valid
-        data = payload
+        if self.size == 1:
+            registers = RS485.read_holding_registers(self.register, self.size)
+            if registers is None or len(registers) == 0:
+                raise Exception("Failed to read registers")
+            
+            value = registers[0]
+            payload = value * self.multipler
+            
+        elif self.size == 2:
+            registers = RS485.read_holding_registers(self.register, self.size)
+            if registers is None or len(registers) < 2:
+                raise Exception("Failed to read registers")
+            
+            # Combine two 16-bit registers into 32-bit value
+            value = (registers[0] << 16) + registers[1]
+            payload = value * self.multipler
         
-        # Add debug logging
+        # Validate the value
+        is_valid, reason = is_value_reasonable(payload, self.name)
+        if not is_valid:
+            Domoticz.Log(f"Rejecting invalid value for {self.name}: {reason}")
+            return
+
+        # Debug logging
         if Parameters["Mode6"] == 'Debug':
-            Domoticz.Debug(f"Valid value for {self.name}: {data} (raw: {value}, multiplier: {self.multipler})")
+            Domoticz.Debug(f"Updating {self.name} with value: {payload}")
+
+        # Update Domoticz devices
+        if self.Type == 243:  # Power measurements
+            if self.name == "TotalActivePower":
+                outerClass.active_power.update(int(payload))
+                if payload < 0:
+                    outerClass.reverse_power.update(abs(int(payload)))
+                    outerClass.forward_power.update(0)
+                else:
+                    outerClass.reverse_power.update(0)
+                    outerClass.forward_power.update(int(payload))
+            elif "Voltage" in self.name:
+                # Update voltage device
+                outerClass.voltage.update(int(payload))
+            elif "Current" in self.name:
+                # Update current device
+                outerClass.current.update(int(payload))
+            elif "ApparentPower" in self.name:
+                # Update apparent power device
+                outerClass.apparent_power.update(int(payload))
+            # Add other device updates as needed
         
-        # Update Domoticz
-        if self.Type == 243 and (self.name == "TotalActivePower"):
-            outerClass.active_power.update(int(data))
-            if data < 0:
-                outerClass.reverse_power.update(int(data))
-                outerClass.forward_power.update(0)
-            else:
-                outerClass.reverse_power.update(0)
-                outerClass.forward_power.update(int(data))
-                
+        Domoticz.Log(f"Successfully updated {self.name}: {payload}")
+        
     except Exception as e:
-        Domoticz.Error(f"Error updating value for {self.name}: {str(e)}")
+        Domoticz.Error(f"Error updating {self.name}: {str(e)}")
+        Domoticz.Log("retry updating register in 2 s")
+        sleep(2.0)
 
 
 class BasePlugin:
@@ -343,61 +331,48 @@ def DumpConfigToLog():
 
 def is_value_reasonable(value, register_name):
     """
-    Check if value is within reasonable range for given register type.
-    Returns (bool, str) - (is_valid, reason_if_invalid)
+    Validate if a value is within reasonable ranges for each register type.
+    Returns (is_valid, reason)
     """
-    # Define reasonable ranges for each register type
-    valid_ranges = {
-        # Voltage should be between 180-260V for normal grid power
-        "Voltage": (170, 270),
-        "Voltage_L1": (170, 270),
-        "Voltage_L2": (170, 270),
-        "Voltage_L3": (170, 270),
-        
-        # Current depends on your installation, adjust as needed
-        "Current": (0, 100),  # 0-100A
-        "Current_L1": (0, 100),
-        "Current_L2": (0, 100),
-        "Current_L3": (0, 100),
-        
-        # Power Factor should be between 0 and 1
-        "PowerFactor": (0, 1),
-        "PowerFactor_L1": (0, 1),
-        "PowerFactor_L2": (0, 1),
-        "PowerFactor_L3": (0, 1),
-        
-        # Frequency should be close to 50Hz (or 60Hz depending on your region)
-        "Frequency": (45, 55),  # Adjust to (55, 65) for 60Hz systems
-        
-        # Power readings (in Watts)
-        "TotalActivePower": (-25000, 25000),  # ±25kW, adjust based on your installation
-        "ActivePower_L1": (-25000, 25000),
-        "ActivePower_L2": (-25000, 25000),
-        "ActivePower_L3": (-25000, 25000),
-        
-        # Energy readings (always positive)
-        "TotalActiveEnergy": (0, 999999),
-        "ForwardActiveEnergy": (0, 999999),
-        "ReverseActiveEnergy": (0, 999999),
-        
-        # Reactive Power
+    ranges = {
+        "Voltage": (0, 300),           # Typical range for most power systems
+        "Current": (0, 100),           # Amps
+        "ActivePower": (-25000, 25000), # Watts, allowing for reverse power
+        "ReactivePower": (-25000, 25000),
+        "ApparentPower": (0, 25000),   # VA
+        "PowerFactor": (-1, 1),        # Standard PF range
+        "Frequency": (45, 65),         # Hz, typical grid frequencies
+        "TotalEnergy": (0, 1000000),   # kWh
+        "TotalActivePower": (-25000, 25000),
         "TotalReactivePower": (-25000, 25000),
-        "ReactivePower_L1": (-25000, 25000),
-        "ReactivePower_L2": (-25000, 25000),
-        "ReactivePower_L3": (-25000, 25000),
+        "TotalApparentPower": (0, 25000),
+        "TotalPowerFactor": (-1, 1),
+        "ApparentPower_L1": (0, 25000),
+        "ApparentPower_L2": (0, 25000),
+        "ApparentPower_L3": (0, 25000),
+        # Add any other registers you have
     }
-
-    # If we don't have defined ranges for this register, log a warning
-    if register_name not in valid_ranges:
-        return False, f"No validation range defined for register {register_name}"
     
-    # Check if value is None or not a number
-    if value is None or not isinstance(value, (int, float)):
-        return False, f"Invalid value type for {register_name}: {type(value)}"
+    # Find the matching range by partial name match
+    matching_range = None
+    for range_name, range_values in ranges.items():
+        if range_name in register_name:
+            matching_range = range_values
+            break
     
-    min_val, max_val = valid_ranges[register_name]
+    if matching_range is None:
+        # If no range is defined, log it but accept the value
+        Domoticz.Debug(f"No validation range defined for register {register_name}")
+        return True, "No validation range defined"
+        
+    min_val, max_val = matching_range
+    if value is None:
+        return False, "Value is None"
     
-    if value < min_val or value > max_val:
-        return False, f"Value {value} for {register_name} is outside valid range [{min_val}, {max_val}]"
+    if isinstance(value, (int, float)):
+        if min_val <= value <= max_val:
+            return True, "Value within range"
+        else:
+            return False, f"Value {value} outside range [{min_val}, {max_val}]"
     
-    return True, "OK"
+    return False, f"Invalid value type: {type(value)}"
