@@ -237,9 +237,7 @@ class BasePlugin:
                     auto_open=True, 
                     auto_close=False,  # Keep connection open
                     timeout=2,
-                    retry_on_empty=True,
-                    retries=3,         # Number of retries
-                    reconnect_delay=1  # Delay between reconnection attempts
+                    retries=3         # Number of retries
                 )
                 # Only set MyMode if connection was successful
                 if self.RS485:
