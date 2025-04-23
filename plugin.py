@@ -253,23 +253,23 @@ class BasePlugin:
 #           import rpdb
 #           rpdb.set_trace()
 
-        Domoticz.Log("DDS238-7 Modbus plugin start, mode: "+Parameters["Mode4"]+ "debug: "+Parameters["Mode6"])
-        DeviceID= int(Parameters["Mode2"])
+        Domoticz.Log("DDS238-7 Modbus plugin start, mode: "+Parameters["Mode4"])
+        DeviceID = int(Parameters["Mode2"])
 
         if Parameters["Mode4"] == "RTU" or Parameters["Mode4"] == "ASCII":
-                self.RS485 = minimalmodbus.Instrument(Parameters["SerialPort"], DeviceID) 
-                self.RS485.serial.baudrate = Parameters["Mode1"]
-                self.RS485.serial.bytesize = 8
-                self.RS485.serial.parity = minimalmodbus.serial.PARITY_NONE 
-                self.RS485.serial.stopbits = 1
-                self.RS485.serial.timeout = 1
-                self.RS485.debug = False
+            self.RS485 = minimalmodbus.Instrument(Parameters["SerialPort"], DeviceID) 
+            self.RS485.serial.baudrate = Parameters["Mode1"]
+            self.RS485.serial.bytesize = 8
+            self.RS485.serial.parity = minimalmodbus.serial.PARITY_NONE 
+            self.RS485.serial.stopbits = 1
+            self.RS485.serial.timeout = 1
+            self.RS485.debug = False
+            self.RS485.mode = minimalmodbus.MODE_RTU
+            self.RS485.MyMode = 'minimalmodbus'
+            if Parameters["Mode4"] == "RTU":
                 self.RS485.mode = minimalmodbus.MODE_RTU
-                self.RS485.MyMode = 'minimalmodbus'
-                if Parameters["Mode4"] == "RTU":
-                    self.RS485.mode = minimalmodbus.MODE_RTU
-                elif Parameters["Mode4"] == "ASCII":
-                    self.RS485.mode = minimalmodbus.MODE_ASCII  
+            elif Parameters["Mode4"] == "ASCII":
+                self.RS485.mode = minimalmodbus.MODE_ASCII  
         elif Parameters["Mode4"] == "TCP":
             Domoticz.Debug("Using pymodbus, connecting to "+Parameters["Address"]+":"+Parameters["Port"]+" unit ID: "+ str(DeviceID))
             try: 
@@ -283,15 +283,22 @@ class BasePlugin:
                     reconnect=True,    # Enable reconnection
                     retry_on_empty=True
                 )
-            except: 
-                Domoticz.Log("pyModbus connection failure")
-            self.RS485.MyMode = 'pymodbus'
-            Domoticz.Debug("Using pymodbus, connected to "+Parameters["Address"]+":"+Parameters["Port"]+" unit ID: "+ str(DeviceID) + " mode: "+self.RS485.MyMode + " object: " + str(self.RS485))  
-        else:
-            Domoticz.Log("Unknown mode: "+Parameters["Mode4"])   
-                
-        devicecreated = []
+                # Only set MyMode if connection was successful
+                if self.RS485:
+                    self.RS485.MyMode = 'pymodbus'
+                else:
+                    Domoticz.Error("Failed to create ModbusClient - check your connection parameters")
+                    return
+            except Exception as e: 
+                Domoticz.Error(f"pyModbus connection failure: {str(e)}")
+                return  # Exit onStart if we can't establish connection
 
+        # Only initialize devices if we have a valid connection
+        if not self.RS485 or isinstance(self.RS485, str):
+            Domoticz.Error("No valid Modbus connection established")
+            return
+
+        # Initialize devices list
         self.devs = [
                 Dev(1,"TotalEnergy",10,0x00,size=2,functioncode=3,Type=250,SubType=1,Description="Total energy balance"),
                 Dev(2,"LifeEnergy",1,0x00,size=2,functioncode=3,Type=250,SubType=1,Description="Total energy flow"),
