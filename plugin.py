@@ -330,44 +330,67 @@ def is_value_reasonable(value, register_name):
     Returns (is_valid, reason)
     """
     ranges = {
-        "Voltage": (0, 300),           # Typical range for most power systems
-        "Current": (0, 100),           # Amps
-        "ActivePower": (-25000, 25000), # Watts, allowing for reverse power
-        "ReactivePower": (-25000, 25000),
-        "ApparentPower": (0, 25000),   # VA
-        "PowerFactor": (-1, 1),        # Standard PF range
-        "Frequency": (45, 65),         # Hz, typical grid frequencies
-        "TotalEnergy": (0, 1000000),   # kWh
-        "TotalActivePower": (-25000, 25000),
-        "TotalReactivePower": (-25000, 25000),
-        "TotalApparentPower": (0, 25000),
-        "TotalPowerFactor": (-1, 1),
-        "ApparentPower_L1": (0, 25000),
-        "ApparentPower_L2": (0, 25000),
-        "ApparentPower_L3": (0, 25000),
-        # Add any other registers you have
+        # Energy Measurements (Type 250)
+        "TotalEnergy": (0, 1000000),      # kWh
+        "LifeEnergy": (0, 1000000),       # kWh
+        "ReactiveEnergy": (0, 1000000),   # kVArh
+        "Import Energy": (0, 1000000),    # kWh (Reverse energy)
+        "Export Energy": (0, 1000000),    # kWh (Forward energy)
+        
+        # Voltage Related (Type 243, SubType 8)
+        "Voltage_L1": (0, 300),           # V
+        "Voltage_L2": (0, 300),           # V
+        "Voltage_L3": (0, 300),           # V
+        "Voltage Frequency": (45, 65),     # Hz
+        
+        # Current Related (Type 243, SubType 23)
+        "Current_L1": (0, 100),           # A
+        "Current_L2": (0, 100),           # A
+        "Current_L3": (0, 100),           # A
+        
+        # Active Power (Type 243, SubType 31, signed)
+        "TotalActivePower": (-25000, 25000),  # W
+        "ActivePower_L1": (-25000, 25000),    # W
+        "ActivePower_L2": (-25000, 25000),    # W
+        "ActivePower_L3": (-25000, 25000),    # W
+        
+        # Reactive Power (Type 243, SubType 31, signed)
+        "TotalReactivePower": (-25000, 25000),  # kVAr
+        "ReactivePower_L1": (-25000, 25000),    # kVAr
+        "ReactivePower_L2": (-25000, 25000),    # kVAr
+        "ReactivePower_L3": (-25000, 25000),    # kVAr
+        
+        # Apparent Power (Type 243, SubType 31)
+        "TotalApparentPower": (0, 25000),     # kVA
+        "ApparentPower_L1": (0, 25000),       # kVA
+        "ApparentPower_L2": (0, 25000),       # kVA
+        "ApparentPower_L3": (0, 25000),       # kVA
+        
+        # Power Factor (Type 243, SubType 31)
+        "PowerFactor": (-1, 1),               # PF
+        "PowerFactor_L1": (-1, 1),            # PF
+        "PowerFactor_L2": (-1, 1),            # PF
+        "PowerFactor_L3": (-1, 1),            # PF
+        
+        # Reserved (not used but included for completeness)
+        "Reserved1": (0, 1000000),            # Generic range
+        "Reserved2": (0, 1000000),            # Generic range
     }
     
-    # Find the matching range by partial name match
-    matching_range = None
-    for range_name, range_values in ranges.items():
-        if range_name in register_name:
-            matching_range = range_values
-            break
-    
-    if matching_range is None:
-        # If no range is defined, log it but accept the value
-        Domoticz.Debug(f"No validation range defined for register {register_name}")
-        return True, "No validation range defined"
+    # Exact match instead of partial match for more precise validation
+    if register_name in ranges:
+        min_val, max_val = ranges[register_name]
         
-    min_val, max_val = matching_range
-    if value is None:
-        return False, "Value is None"
+        if value is None:
+            return False, "Value is None"
+        
+        if isinstance(value, (int, float)):
+            if min_val <= value <= max_val:
+                return True, "Value within range"
+            else:
+                return False, f"Value {value} outside range [{min_val}, {max_val}]"
+        return False, f"Invalid value type: {type(value)}"
     
-    if isinstance(value, (int, float)):
-        if min_val <= value <= max_val:
-            return True, "Value within range"
-        else:
-            return False, f"Value {value} outside range [{min_val}, {max_val}]"
-    
-    return False, f"Invalid value type: {type(value)}"
+    # If device name not found in ranges
+    Domoticz.Log(f"Warning: No validation range defined for device: {register_name}")
+    return True, f"No validation range defined for {register_name}"
