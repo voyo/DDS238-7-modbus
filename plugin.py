@@ -159,11 +159,11 @@ class Dev:
         if self.ID in Devices:
             # P1 Smart Meter (Type FA, SubType 1)
             if getattr(Devices[self.ID], "Type", None) == 0xFA and getattr(Devices[self.ID], "SubType", None) == 1:
-                # sValue = "<EnergyDelivered>;<EnergyReturned>;<PowerDelivered>;<PowerReturned>;<GasDelivered>"
+                # sValue = f"{usage1};{usage2};{return1};{return2};{cons};{prod}")
                 if "Import" in self.name:
-                    sValue = f"{payload:.2f};0;0;0;0"
+                    sValue = f"0;0;0;0;{payload:.2f};0"
                 elif "Export" in self.name:
-                    sValue = f"0;{payload:.2f};0;0;0"
+                    sValue = f"0;0;0;0;0;{payload:.2f}"
                 else:
                     sValue = f"{payload:.2f};0;0;0;0"
                 Devices[self.ID].Update(nValue=0, sValue=sValue)
