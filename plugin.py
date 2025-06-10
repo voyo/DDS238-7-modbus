@@ -131,6 +131,10 @@ class Dev:
         if Parameters["Mode6"] == 'Debug':
             Domoticz.Debug(f"Updating {self.name} with value: {payload}")
 
+        # Debug for energy devices
+        if self.name in ["TotalEnergy", "LifeEnergy", "Import Energy", "Export Energy"]:
+            Domoticz.Debug(f"{self.name}: raw value={value}, multiplier={self.multipler}, payload={payload}")
+
         # Update Domoticz devices
         if self.Type == 243:  # Power measurements
             if self.name == "TotalActivePower":
@@ -236,6 +240,8 @@ class BasePlugin:
 
         # Initialize devices list
         self.devs = [
+               # columns description, in one line:
+               #Dev(ID, Name, Multiplier, Register, Size, FunctionCode, Type, SubType, Description)
                 Dev(1,"TotalEnergy",10,0x00,size=2,functioncode=3,Type=250,SubType=1,Description="Total energy balance"),
                 Dev(2,"LifeEnergy",1,0x00,size=2,functioncode=3,Type=250,SubType=1,Description="Total energy flow"),
                 Dev(3,"Reserved1",1,0x02,size=2,functioncode=3,Used=0,Type=250,SubType=1,Description="Reserved1"),
