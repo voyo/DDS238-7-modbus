@@ -157,8 +157,14 @@ class Dev:
         
         # --- Update Domoticz device with new value ---
         if self.ID in Devices:
-            Devices[self.ID].Update(nValue=0, sValue=str(payload))
-            Domoticz.Log(f"Domoticz device {self.ID} updated with value: {payload}")
+            if self.Type == 250 and self.SubType == 1:
+                # Energy counter: sValue must be "<value>;<counter>"
+                sValue = f"{payload:.2f};0"
+                Devices[self.ID].Update(nValue=0, sValue=sValue)
+                Domoticz.Log(f"Domoticz energy device {self.ID} updated with sValue: {sValue}")
+            else:
+                Devices[self.ID].Update(nValue=0, sValue=str(payload))
+                Domoticz.Log(f"Domoticz device {self.ID} updated with value: {payload}")
         else:
             Domoticz.Error(f"Device ID {self.ID} not found in Devices")
         
