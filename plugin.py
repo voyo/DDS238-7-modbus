@@ -142,13 +142,13 @@ class Dev:
                     outerClass.reverse_power.update(0)
                     outerClass.forward_power.update(int(payload))
             elif "Voltage" in self.name:
-                outerClass.voltage.update(int(payload))
+                outerClass.voltage = int(payload)
             elif "Current" in self.name:
-                outerClass.current.update(int(payload))
+                outerClass.current = int(payload)
             elif "ApparentPower" in self.name:
-                outerClass.apparent_power.update(int(payload))
+                outerClass.apparent_power = int(payload)
             elif "TotalEnergy" in self.name:
-                outerClass.total_energy.update(int(payload))
+                outerClass.total_energy = int(payload)
             # Add other device updates as needed
         
         Domoticz.Log(f"Successfully updated {self.name}: {payload}")
@@ -170,6 +170,11 @@ class BasePlugin:
         # Forward power for last 5 minutes
         self.forward_power = Average()
         self.reverse_power = Average()
+        # Store latest values (not averages) for these:
+        self.voltage = 0
+        self.current = 0
+        self.apparent_power = 0
+        self.total_energy = 0
         self.devs = []  # Initialize empty device list
         return
 
