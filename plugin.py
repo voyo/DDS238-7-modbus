@@ -151,7 +151,12 @@ class Dev:
                 outerClass.total_energy = int(payload)
             # Add other device updates as needed
         
-        Domoticz.Log(f"Successfully updated {self.name}: {payload}")
+        # --- Update Domoticz device with new value ---
+        if self.ID in Devices:
+            Devices[self.ID].Update(nValue=0, sValue=str(payload))
+            Domoticz.Log(f"Domoticz device {self.ID} updated with value: {payload}")
+        else:
+            Domoticz.Error(f"Device ID {self.ID} not found in Devices")
         
     except Exception as e:
         Domoticz.Error(f"Error updating {self.name}: {str(e)}")
