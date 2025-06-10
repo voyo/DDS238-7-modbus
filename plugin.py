@@ -157,8 +157,19 @@ class Dev:
         
         # --- Update Domoticz device with new value ---
         if self.ID in Devices:
-            if self.Type == 250 and self.SubType == 1:
-                # Energy counter: sValue must be "<value>;<counter>"
+            # P1 Smart Meter (Type FA, SubType 1)
+            if getattr(Devices[self.ID], "Type", None) == 0xFA and getattr(Devices[self.ID], "SubType", None) == 1:
+                # sValue = "<EnergyDelivered>;<EnergyReturned>;<PowerDelivered>;<PowerReturned>;<GasDelivered>"
+                if "Import" in self.name:
+                    sValue = f"{payload:.2f};0;0;0;0"
+                elif "Export" in self.name:
+                    sValue = f"0;{payload:.2f};0;0;0"
+                else:
+                    sValue = f"{payload:.2f};0;0;0;0"
+                Devices[self.ID].Update(nValue=0, sValue=sValue)
+                Domoticz.Log(f"Domoticz P1 device {self.ID} updated with sValue: {sValue}")
+            # Energy counter: sValue must be "<value>;<counter>"
+            elif self.Type == 250 and self.SubType == 1:
                 sValue = f"{payload:.2f};0"
                 Devices[self.ID].Update(nValue=0, sValue=sValue)
                 Domoticz.Log(f"Domoticz energy device {self.ID} updated with sValue: {sValue}")
