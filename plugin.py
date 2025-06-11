@@ -159,14 +159,25 @@ class Dev:
         # --- Update Domoticz device with new value ---
         if self.ID in Devices:
             # P1 Smart Meter (Type FA, SubType 1)
-            if getattr(Devices[self.ID], "Type", None) == 0xFA and getattr(Devices[self.ID], "SubType", None) == 1:
+#            if getattr(Devices[self.ID], "Type", None) == 0xFA and getattr(Devices[self.ID], "SubType", None) == 1:
                 # sValue = f"{usage1};{usage2};{return1};{return2};{cons};{prod}")
-                if "Total" in self.name:
-                    USAGE1=USAGE2=RETURN1=RETURN2=PROD=CONS=str(0)
-                    USAGE1=str(outerClass.consum
-
-                if "Import" in self.name:
-#                    sValue = f"{payload:.2f};0;0;0;0;0"
+                if "TotalActivePower" in self.name:
+                    outerClass.active_power.update(int(payload))
+                    if payload < 0:
+                        outerClass.reverse_power.update(abs(int(payload)))
+                        outerClass.forward_power.update(0)
+                    else:
+                        outerClass.reverse_power.update(0)
+                        outerClass.forward_power.update(int(payload))
+                if "TotalReactivePower" in self.name:
+                    outerClass.reactive_power.update(int(payload))
+                    if payload < 0:
+                        outerClass.reverse_reactive_power.update(abs(int(payload)))
+                        outerClass.forward_reactive_power.update(0)
+                    else:
+                        outerClass.reverse_reactive_power.update(0)
+                        outerClass.forward_reactive_power.update(int(payload))
+                if "Import Energy" in self.name:
                     USAGE1=str(payload*10)
                     CONS = str(outerClass.forward_power.get())
                     USAGE2=RETURN1=RETURN2=PROD=str(0)
