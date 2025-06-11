@@ -108,17 +108,18 @@ class Dev:
             registers = RS485.read_holding_registers(self.register, self.size)
             if registers is None or len(registers) == 0:
                 raise Exception("Failed to read registers")
-            
             value = registers[0]
+            if self.signed and value > 32767:
+                value -= 65536
             payload = value * self.multipler
-            
+        
         elif self.size == 2:
             registers = RS485.read_holding_registers(self.register, self.size)
             if registers is None or len(registers) < 2:
                 raise Exception("Failed to read registers")
-            
-            # Combine two 16-bit registers into 32-bit value
             value = (registers[0] << 16) + registers[1]
+            if self.signed and value > 2147483647:
+                value -= 4294967296
             payload = value * self.multipler
         
         # Validate the value
@@ -160,6 +161,10 @@ class Dev:
             # P1 Smart Meter (Type FA, SubType 1)
             if getattr(Devices[self.ID], "Type", None) == 0xFA and getattr(Devices[self.ID], "SubType", None) == 1:
                 # sValue = f"{usage1};{usage2};{return1};{return2};{cons};{prod}")
+                if "Total" in self.name:
+                    USAGE1=USAGE2=RETURN1=RETURN2=PROD=CONS=str(0)
+                    USAGE1=str(outerClass.consum
+
                 if "Import" in self.name:
 #                    sValue = f"{payload:.2f};0;0;0;0;0"
                     USAGE1=str(payload*10)
