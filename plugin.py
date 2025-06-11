@@ -178,12 +178,12 @@ class Dev:
                         outerClass.reverse_reactive_power.update(0)
                         outerClass.forward_reactive_power.update(int(payload))
                 if "Import Energy" in self.name:
-                    USAGE1=str(payload*10)
+                    USAGE1=str(payload * self.multipler)
                     CONS = str(outerClass.forward_power.get())
                     USAGE2=RETURN1=RETURN2=PROD=str(0)
                     sValue = USAGE1+";"+USAGE2+";"+RETURN1+";"+RETURN2+";"+CONS+";"+PROD
                 elif "Export" in self.name:
-                    RETURN1=str(payload*10)
+                    RETURN1=str(payload * self.multipler)
                     PROD = str(abs(outerClass.reverse_power.get())) 
                     USAGE1=USAGE2=RETURN2=CONS=str(0)
                     sValue=RETURN1+";"+USAGE1+";"+USAGE2+";"+RETURN2+";"+CONS+";"+PROD
