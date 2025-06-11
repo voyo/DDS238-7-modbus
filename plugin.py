@@ -110,7 +110,7 @@ class Dev:
                 raise Exception("Failed to read registers")
             value = registers[0]
             if self.signed and value > 32767:
-                value -= 65536
+                value -= 65536 # this means that the value is negative
             payload = value * self.multipler
         
         elif self.size == 2:
@@ -119,7 +119,7 @@ class Dev:
                 raise Exception("Failed to read registers")
             value = (registers[0] << 16) + registers[1]
             if self.signed and value > 2147483647:
-                value -= 4294967296
+                value -= 4294967296 # this means that the value is negative
             payload = value * self.multipler
         
         # Validate the value
@@ -178,12 +178,12 @@ class Dev:
                         outerClass.reverse_reactive_power.update(0)
                         outerClass.forward_reactive_power.update(int(payload))
                 if "Import Energy" in self.name:
-                    USAGE1=str(payload * self.multipler)
+                    USAGE1=str(payload)
                     CONS = str(outerClass.forward_power.get())
                     USAGE2=RETURN1=RETURN2=PROD=str(0)
                     sValue = USAGE1+";"+USAGE2+";"+RETURN1+";"+RETURN2+";"+CONS+";"+PROD
                 elif "Export" in self.name:
-                    RETURN1=str(payload * self.multipler)
+                    RETURN1=str(payload)
                     PROD = str(abs(outerClass.reverse_power.get())) 
                     USAGE1=USAGE2=RETURN2=CONS=str(0)
                     sValue=RETURN1+";"+USAGE1+";"+USAGE2+";"+RETURN2+";"+CONS+";"+PROD
