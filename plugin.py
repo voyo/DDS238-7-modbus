@@ -167,7 +167,10 @@ class Dev:
                     USAGE2=RETURN1=RETURN2=PROD=str(0)
                     sValue = USAGE1+";"+USAGE2+";"+RETURN1+";"+RETURN2+";"+CONS+";"+PROD
                 elif "Export" in self.name:
-                    sValue = f"{payload:.2f}0;0;0;0;0"
+                    RETURN1=str(payload*10)
+                    PROD = str(abs(outerClass.reverse_power.get())) 
+                    USAGE1=USAGE2=RETURN2=CONS=str(0)
+                    sValue=RETURN1+";"+USAGE1+";"+USAGE2+";"+RETURN2+";"+CONS+";"+PROD
                 else:
                     sValue = f"{payload:.2f};0;0;0;0"
                 Devices[self.ID].Update(nValue=0, sValue=sValue)
