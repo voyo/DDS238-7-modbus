@@ -159,7 +159,7 @@ class Dev:
         # --- Update Domoticz device with new value ---
         if self.ID in Devices:
             # P1 Smart Meter (Type FA, SubType 1)
-#            if getattr(Devices[self.ID], "Type", None) == 0xFA and getattr(Devices[self.ID], "SubType", None) == 1:
+            if getattr(Devices[self.ID], "Type", None) == 0xFA and getattr(Devices[self.ID], "SubType", None) == 1:
                 # sValue = f"{usage1};{usage2};{return1};{return2};{cons};{prod}")
                 if "TotalActivePower" in self.name:
                     outerClass.active_power.update(int(payload))
