@@ -387,11 +387,11 @@ def is_value_reasonable(value, register_name):
     """
     ranges = {
         # Energy Measurements (Type 250)
-        "TotalEnergy": (0, 1000000),      # kWh
-        "LifeEnergy": (0, 1000000),       # kWh
-        "ReactiveEnergy": (0, 1000000),   # kVArh
-        "Import Energy": (0, 1000000),    # kWh (Reverse energy)
-        "Export Energy": (0, 1000000),    # kWh (Forward energy)
+        "TotalEnergy": (0, 100000000),      # Wh
+        "LifeEnergy": (0, 100000000),       # Wh
+        "ReactiveEnergy": (0, 100000000),   # VArh
+        "Import Energy": (0, 100000000),    # Wh (Reverse energy)
+        "Export Energy": (0, 100000000),    # Wh (Forward energy)
         
         # Voltage Related (Type 243, SubType 8)
         "Voltage_L1": (0, 300),           # V
