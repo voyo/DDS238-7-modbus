@@ -161,9 +161,13 @@ class Dev:
             if getattr(Devices[self.ID], "Type", None) == 0xFA and getattr(Devices[self.ID], "SubType", None) == 1:
                 # sValue = f"{usage1};{usage2};{return1};{return2};{cons};{prod}")
                 if "Import" in self.name:
-                    sValue = f"0;0;0;0;{payload:.2f};0"
+#                    sValue = f"{payload:.2f};0;0;0;0;0"
+                    USAGE1=str(payload*10)
+                    CONS = str(outerClass.forward_power.get())
+                    USAGE2=RETURN1=RETURN2=PROD=str(0)
+                    sValue = USAGE1+";"+USAGE2+";"+RETURN1+";"+RETURN2+";"+CONS+";"+PROD
                 elif "Export" in self.name:
-                    sValue = f"0;0;0;0;0;{payload:.2f}"
+                    sValue = f"{payload:.2f}0;0;0;0;0"
                 else:
                     sValue = f"{payload:.2f};0;0;0;0"
                 Devices[self.ID].Update(nValue=0, sValue=sValue)
