@@ -133,12 +133,12 @@ class Dev:
             Domoticz.Debug(f"Updating {self.name} with value: {payload}")
 
         # Debug for energy devices
-        if self.name in ["TotalEnergy", "LifeEnergy", "Import Energy", "Export Energy"]:
+        if self.name in ["Total Energy", "Life Energy", "Import Energy", "Export Energy"]:
             Domoticz.Debug(f"{self.name}: raw value={value}, multiplier={self.multipler}, payload={payload}")
 
         # Update Domoticz devices
         if self.Type == 243:  # Power measurements
-            if self.name == "TotalActivePower":
+            if self.name == "Total Active Power":
                 outerClass.active_power.update(int(payload))
                 if payload < 0:
                     outerClass.reverse_power.update(abs(int(payload)))
@@ -150,16 +150,16 @@ class Dev:
                 outerClass.voltage = int(payload)
             elif "Current" in self.name:
                 outerClass.current = int(payload)
-            elif "ApparentPower" in self.name:
+            elif "Apparent Power" in self.name:
                 outerClass.apparent_power = int(payload)
-            elif "TotalEnergy" in self.name:
+            elif "Total Energy" in self.name:
                 outerClass.total_energy = int(payload)
             # Add other device updates as needed
-        
+        USAGE1=USAGE2=RETURN1=RETURN2=CONS=PROD=str(0)        
         # --- Update Domoticz device with new value ---
         if self.ID in Devices:
             # P1 Smart Meter (Type FA, SubType 1)
-            if getattr(Devices[self.ID], "Type", None) == 0xFA and getattr(Devices[self.ID], "SubType", None) == 1:
+            if self.Type == 250 and self.SubType in (1, 6):
                 # sValue = f"{usage1};{usage2};{return1};{return2};{cons};{prod}")
                 if "TotalActivePower" in self.name:
                     outerClass.active_power.update(int(payload))
@@ -180,19 +180,26 @@ class Dev:
                 if "Import Energy" in self.name:
                     USAGE1=str(payload)
                     CONS = str(outerClass.forward_power.get())
-                    USAGE2=RETURN1=RETURN2=PROD=str(0)
                     sValue = USAGE1+";"+USAGE2+";"+RETURN1+";"+RETURN2+";"+CONS+";"+PROD
-                elif "Export" in self.name:
+                elif "Export Energy" in self.name:
                     RETURN1=str(payload)
                     PROD = str(abs(outerClass.reverse_power.get())) 
-                    USAGE1=USAGE2=RETURN2=CONS=str(0)
-                    sValue=RETURN1+";"+USAGE1+";"+USAGE2+";"+RETURN2+";"+CONS+";"+PROD
+                    sValue = USAGE1+";"+USAGE2+";"+RETURN1+";"+RETURN2+";"+CONS+";"+PROD
+                elif "Life Energy" in self.name:
+                    USAGE1=str(payload)
+                    CONS = str(int(outerClass.active_power.get()))
+                    sValue = USAGE1+";"+USAGE2+";"+RETURN1+";"+RETURN2+";"+CONS+";"+PROD
+                elif "Reactive Energy" in self.name:
+                    USAGE1=str(payload)
+                    CONS = str(int(outerClass.reactive_power.get()))
+                    sValue = USAGE1+";"+USAGE2+";"+RETURN1+";"+RETURN2+";"+CONS+";"+PROD
                 else:
                     sValue = f"{payload:.2f};0;0;0;0"
+
                 Devices[self.ID].Update(nValue=0, sValue=sValue)
                 Domoticz.Log(f"Domoticz P1 device {self.ID} updated with sValue: {sValue}")
             # Energy counter: sValue must be "<value>;<counter>"
-            elif self.Type == 250 and self.SubType == 1:
+            elif self.Type == 250 and self.SubType in (1, 6):
                 sValue = f"{payload:.2f};0"
                 Devices[self.ID].Update(nValue=0, sValue=sValue)
                 Domoticz.Log(f"Domoticz energy device {self.ID} updated with sValue: {sValue}")
@@ -282,42 +289,42 @@ class BasePlugin:
         self.devs = [
                # columns description, in one line:
                #Dev(ID, Name, Multiplier, Register, Size, FunctionCode, Type, SubType, Description)
-                Dev(1,"TotalEnergy",1,0x00,size=2,functioncode=3,Type=250,SubType=1,Description="Total energy balance"),
-                Dev(2,"LifeEnergy",1,0x00,size=2,functioncode=3,Type=250,SubType=1,Description="Total energy flow"),
-                Dev(3,"Reserved1",1,0x02,size=2,functioncode=3,Used=0,Type=250,SubType=1,Description="Reserved1"),
-                Dev(4,"ReactiveEnergy",1,0x04,size=2,functioncode=3,options={"Custom":"1;kVArh"},Type=250,SubType=6,Description="Reactive energy"), # "Custom":"1;kVArh
-                Dev(5,"Reserved2",1,0x06,size=2,functioncode=3,Used=0,Type=250,SubType=1,Description="Reserved2"),
-                Dev(6,"Import Energy",1,0x08,size=2,functioncode=3,Type=250,SubType=1,Description="Reverse energy"),
-                Dev(7,"Export Energy",1,0xA,size=2,functioncode=3,Type=250,SubType=1,Description="Forward energy"),
+                Dev(1,"Total Energy",10,0x00,size=2,functioncode=3,Type=250,SubType=1,Description="Total energy balance"),
+                Dev(2,"Life Energy",10,0x00,size=2,functioncode=3,Type=250,SubType=1,Description="Total energy flow"),
+                Dev(3,"Reserved1",10,0x02,size=2,functioncode=3,Used=0,Type=250,SubType=1,Description="Reserved1"),
+                Dev(4,"Reactive Energy",10,0x04,size=2,functioncode=3,options={"Custom":"1;kVArh"},Type=250,SubType=6,Description="Reactive energy"), # "Custom":"1;kVArh
+                Dev(5,"Reserved2",10,0x06,size=2,functioncode=3,Used=0,Type=250,SubType=1,Description="Reserved2"),
+                Dev(6,"Import Energy",10,0x08,size=2,functioncode=3,Type=250,SubType=1,Description="Forward energy"),
+                Dev(7,"Export Energy",10,0xA,size=2,functioncode=3,Type=250,SubType=1,Description="Reverse energy"),
                 Dev(8,"Voltage Frequency",0.01,0x11,size=1,functioncode=3,options={"Custom":"1;Hz"},Type=243,SubType=31,Description="Voltage Frequency"),
              
-                Dev(9,"Voltage_L1",0.1,0x80,size=1,functioncode=3,Type=243,SubType=8,Description="Voltage L1"),
-                Dev(10,"Voltage_L2",0.1,0x81,size=1,functioncode=3,Type=243,SubType=8,Description="Voltage L2"),
-                Dev(11,"Voltage_L3",0.1,0x82,size=1,functioncode=3,Type=243,SubType=8,Description="Voltage L3"),
+                Dev(9, "Voltage L1",0.1,0x80,size=1,functioncode=3,Type=243,SubType=8,Description="Voltage L1"),
+                Dev(10,"Voltage L2",0.1,0x81,size=1,functioncode=3,Type=243,SubType=8,Description="Voltage L2"),
+                Dev(11,"Voltage L3",0.1,0x82,size=1,functioncode=3,Type=243,SubType=8,Description="Voltage L3"),
              
-                Dev(12,"Current_L1",0.01,0x83,size=1,functioncode=3,Type=243,SubType=23,Description="Current L1"),
-                Dev(13,"Current_L2",0.01,0x84,size=1,functioncode=3,Type=243,SubType=23,Description="Current L2"),
-                Dev(14,"Current_L3",0.01,0x85,size=1,functioncode=3,Type=243,SubType=23,Description="Current L3"),
+                Dev(12,"Current L1",0.01,0x83,size=1,functioncode=3,Type=243,SubType=23,Description="Current L1"),
+                Dev(13,"Current L2",0.01,0x84,size=1,functioncode=3,Type=243,SubType=23,Description="Current L2"),
+                Dev(14,"Current L3",0.01,0x85,size=1,functioncode=3,Type=243,SubType=23,Description="Current L3"),
            
-                Dev(15,"TotalActivePower",1,0x86,size=2,functioncode=3,options={"Custom":"1;W"},Type=243,SubType=31,signed=True, Description="Total active power"),
-                Dev(16,"ActivePower_L1",1,0x88,size=1,functioncode=3,options={"Custom":"1;W"},Type=243,SubType=31,signed=True,Description="Active power L1"),
-                Dev(17,"ActivePower_L2",1,0x89,size=1,functioncode=3,options={"Custom":"1;W"},Type=243,SubType=31,signed=True,Description="Active power L2"),
-                Dev(18,"ActivePower_L3",1,0x8A,size=1,functioncode=3,options={"Custom":"1;W"},Type=243,SubType=31,signed=True,Description="Active power L3"),
+                Dev(15,"Total Active Power",1,0x86,size=2,functioncode=3,options={"Custom":"1;W"},Type=243,SubType=31,signed=True, Description="Total active power"),
+                Dev(16,"Active Power L1",1,0x88,size=1,functioncode=3,options={"Custom":"1;W"},Type=243,SubType=31,signed=True,Description="Active power L1"),
+                Dev(17,"Active Power L2",1,0x89,size=1,functioncode=3,options={"Custom":"1;W"},Type=243,SubType=31,signed=True,Description="Active power L2"),
+                Dev(18,"Active Power L3",1,0x8A,size=1,functioncode=3,options={"Custom":"1;W"},Type=243,SubType=31,signed=True,Description="Active power L3"),
            
-                Dev(19,"TotalReactivePower",0.001,0x8B,size=2,functioncode=3,options={"Custom":"1;kVAr"},Type=243,SubType=31,signed=True,Description="Total reactive power"), # "Custom":"1;kVAr
-                Dev(20,"ReactivePower_L1",0.001,0x8D,size=1,functioncode=3,options={"Custom":"1;kVAr"},Type=243,SubType=31,signed=True,Description="Reactive power L1"), # "Custom":"1;kVAr
-                Dev(21,"ReactivePower_L2",0.001,0x8E,size=1,functioncode=3,options={"Custom":"1;kVAr"},Type=243,SubType=31,signed=True,Description="Reactive power L2"), # "Custom":"1;kVAr
-                Dev(22,"ReactivePower_L3",0.001,0x8F,size=1,functioncode=3,options={"Custom":"1;kVAr"},Type=243,SubType=31,signed=True,Description="Reactive power L3"), # "Custom":"1;kVAr
+                Dev(19,"Total Reactive Power",0.001,0x8B,size=2,functioncode=3,options={"Custom":"1;kVAr"},Type=243,SubType=31,signed=True,Description="Total reactive power"), # "Custom":"1;kVAr
+                Dev(20,"Reactive Power L1",0.001,0x8D,size=1,functioncode=3,options={"Custom":"1;kVAr"},Type=243,SubType=31,signed=True,Description="Reactive power L1"), # "Custom":"1;kVAr
+                Dev(21,"Reactive Power L2",0.001,0x8E,size=1,functioncode=3,options={"Custom":"1;kVAr"},Type=243,SubType=31,signed=True,Description="Reactive power L2"), # "Custom":"1;kVAr
+                Dev(22,"Reactive Power L3",0.001,0x8F,size=1,functioncode=3,options={"Custom":"1;kVAr"},Type=243,SubType=31,signed=True,Description="Reactive power L3"), # "Custom":"1;kVAr
            
-                Dev(23,"TotalApparentPower",0.001,0x90,size=2,functioncode=3,options={"Custom":"1;kVA"},Type=243,SubType=31,Description="Total apparent power"), # "Custom":"1;kVA
-                Dev(24,"ApparentPower_L1",0.001,0x92,size=1,functioncode=3,options={"Custom":"1;kVA"},Type=243,SubType=31,Description="Apparent power L1"), # "Custom":"1;kVA
-                Dev(25,"ApparentPower_L2",0.001,0x93,size=1,functioncode=3,options={"Custom":"1;kVA"},Type=243,SubType=31,Description="Apparent power L2"), # "Custom":"1;kVA
-                Dev(26,"ApparentPower_L3",0.001,0x94,size=1,functioncode=3,options={"Custom":"1;kVA"},Type=243,SubType=31,Description="Apparent power L3"), # "Custom":"1;kVA
+                Dev(23,"Total Apparent Power",0.001,0x90,size=2,functioncode=3,options={"Custom":"1;kVA"},Type=243,SubType=31,Description="Total apparent power"), # "Custom":"1;kVA
+                Dev(24,"Apparent Power L1",0.001,0x92,size=1,functioncode=3,options={"Custom":"1;kVA"},Type=243,SubType=31,Description="Apparent power L1"), # "Custom":"1;kVA
+                Dev(25,"Apparent Power L2",0.001,0x93,size=1,functioncode=3,options={"Custom":"1;kVA"},Type=243,SubType=31,Description="Apparent power L2"), # "Custom":"1;kVA
+                Dev(26,"Apparent Power L3",0.001,0x94,size=1,functioncode=3,options={"Custom":"1;kVA"},Type=243,SubType=31,Description="Apparent power L3"), # "Custom":"1;kVA
            
-                Dev(27,"PowerFactor",0.001,0x95,size=1,functioncode=3,Type=243,SubType=31,Description="Power factor"),
-                Dev(28,"PowerFactor_L1",0.001,0x96,size=1,functioncode=3,Type=243,SubType=31,Description="Power factor L1"),
-                Dev(29,"PowerFactor_L2",0.001,0x97,size=1,functioncode=3,Type=243,SubType=31,Description="Power factor L2"),
-                Dev(30,"PowerFactor_L3",0.001,0x98,size=1,functioncode=3,Type=243,SubType=31,Description="Power factor L3")
+                Dev(27,"Power Factor",0.001,0x95,size=1,functioncode=3,Type=243,SubType=31,Description="Power factor"),
+                Dev(28,"Power Factor L1",0.001,0x96,size=1,functioncode=3,Type=243,SubType=31,Description="Power factor L1"),
+                Dev(29,"Power Factor L2",0.001,0x97,size=1,functioncode=3,Type=243,SubType=31,Description="Power factor L2"),
+                Dev(30,"Power Factor L3",0.001,0x98,size=1,functioncode=3,Type=243,SubType=31,Description="Power factor L3")
 
                 ]
                 
@@ -387,50 +394,50 @@ def is_value_reasonable(value, register_name):
     """
     ranges = {
         # Energy Measurements (Type 250)
-        "TotalEnergy": (0, 10000000),      # Wh
-        "LifeEnergy": (0, 10000000),       # Wh
-        "ReactiveEnergy": (0, 10000000),   # VArh
-        "Import Energy": (0, 10000000),    # Wh (Reverse energy)
-        "Export Energy": (0, 10000000),    # Wh (Forward energy)
+        "Total Energy": (0, 100000000),      # Wh
+        "Life Energy": (0, 100000000),       # Wh
+        "Reactive Energy": (0, 100000000),   # VArh
+        "Import Energy": (0, 100000000),    # Wh (Reverse energy)
+        "Export Energy": (0, 100000000),    # Wh (Forward energy)
         
         # Voltage Related (Type 243, SubType 8)
-        "Voltage_L1": (0, 300),           # V
-        "Voltage_L2": (0, 300),           # V
-        "Voltage_L3": (0, 300),           # V
+        "Voltage L1": (0, 300),           # V
+        "Voltage L2": (0, 300),           # V
+        "Voltage L3": (0, 300),           # V
         "Voltage Frequency": (45, 65),     # Hz
         
         # Current Related (Type 243, SubType 23)
-        "Current_L1": (0, 100),           # A
-        "Current_L2": (0, 100),           # A
-        "Current_L3": (0, 100),           # A
+        "Current L1": (0, 100),           # A
+        "Current L2": (0, 100),           # A
+        "Current L3": (0, 100),           # A
         
         # Active Power (Type 243, SubType 31, signed)
-        "TotalActivePower": (-25000, 25000),  # W
-        "ActivePower_L1": (-25000, 25000),    # W
-        "ActivePower_L2": (-25000, 25000),    # W
-        "ActivePower_L3": (-25000, 25000),    # W
+        "Total Active Power": (-25000, 25000),  # W
+        "Active Power L1": (-25000, 25000),    # W
+        "Active Power L2": (-25000, 25000),    # W
+        "Active Power L3": (-25000, 25000),    # W
         
         # Reactive Power (Type 243, SubType 31, signed)
-        "TotalReactivePower": (-25000, 25000),  # kVAr
-        "ReactivePower_L1": (-25000, 25000),    # kVAr
-        "ReactivePower_L2": (-25000, 25000),    # kVAr
-        "ReactivePower_L3": (-25000, 25000),    # kVAr
+        "Total Reactive Power": (-25000, 25000),  # kVAr
+        "Reactive Power L1": (-25000, 25000),    # kVAr
+        "Reactive Power L2": (-25000, 25000),    # kVAr
+        "Reactive Power L3": (-25000, 25000),    # kVAr
         
         # Apparent Power (Type 243, SubType 31)
-        "TotalApparentPower": (0, 25000),     # kVA
-        "ApparentPower_L1": (0, 25000),       # kVA
-        "ApparentPower_L2": (0, 25000),       # kVA
-        "ApparentPower_L3": (0, 25000),       # kVA
+        "Total Apparent Power": (0, 25000),     # kVA
+        "Apparent Power L1": (0, 25000),       # kVA
+        "Apparent Power L2": (0, 25000),       # kVA
+        "Apparent Power L3": (0, 25000),       # kVA
         
         # Power Factor (Type 243, SubType 31)
-        "PowerFactor": (-1, 1),               # PF
-        "PowerFactor_L1": (-1, 1),            # PF
-        "PowerFactor_L2": (-1, 1),            # PF
-        "PowerFactor_L3": (-1, 1),            # PF
+        "Power Factor": (-1, 1),               # PF
+        "Power Factor L1": (-1, 1),            # PF
+        "Power Factor L2": (-1, 1),            # PF
+        "Power Factor L3": (-1, 1),            # PF
         
         # Reserved (not used but included for completeness)
-        "Reserved1": (0, 1000000),            # Generic range
-        "Reserved2": (0, 1000000),            # Generic range
+        "Reserved1": (0, 100000000),            # Generic range
+        "Reserved2": (0, 100000000),            # Generic range
     }
     
     # Exact match instead of partial match for more precise validation
