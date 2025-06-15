@@ -289,9 +289,9 @@ class BasePlugin:
         self.devs = [
                # columns description, in one line:
                #Dev(ID, Name, Multiplier, Register, Size, FunctionCode, Type, SubType, Description)
-                Dev(1,"Total Energy",10,0x00,size=2,functioncode=3,Type=250,SubType=1,Description="Total energy balance"),
-                Dev(2,"Life Energy",10,0x00,size=2,functioncode=3,Type=250,SubType=1,Description="Total energy flow"),
-                Dev(3,"Reserved1",10,0x02,size=2,functioncode=3,Used=0,Type=250,SubType=1,Description="Reserved1"),
+                Dev(1,"Total Energy",0.1,0x00,size=2,functioncode=3,Type=250,SubType=1,Description="Total energy balance"),
+                Dev(2,"Life Energy",0.1,0x00,size=2,functioncode=3,Type=250,SubType=1,Description="Total energy flow"),
+                Dev(3,"Reserved1",0.1,0x02,size=2,functioncode=3,Used=0,Type=250,SubType=1,Description="Reserved1"),
                 Dev(4,"Reactive Energy",10,0x04,size=2,functioncode=3,options={"Custom":"1;kVArh"},Type=250,SubType=6,Description="Reactive energy"), # "Custom":"1;kVArh
                 Dev(5,"Reserved2",10,0x06,size=2,functioncode=3,Used=0,Type=250,SubType=1,Description="Reserved2"),
                 Dev(6,"Import Energy",10,0x08,size=2,functioncode=3,Type=250,SubType=1,Description="Forward energy"),
