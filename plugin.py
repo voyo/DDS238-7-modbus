@@ -137,7 +137,7 @@ class Dev:
             Domoticz.Debug(f"{self.name}: raw value={value}, multiplier={self.multipler}, payload={payload}")
 
         # Update Domoticz devices
-        if self.Type == 243:  # Power measurements
+        if self.Type == 243:  # Power, Voltage, Current measurements
             if self.name == "Total Active Power":
                 outerClass.active_power.update(int(payload))
                 if payload < 0:
@@ -152,8 +152,6 @@ class Dev:
                 outerClass.current = int(payload)
             elif "Apparent Power" in self.name:
                 outerClass.apparent_power = int(payload)
-            elif "Total Energy" in self.name:
-                outerClass.total_energy = int(payload)
             # Add other device updates as needed
         USAGE1=USAGE2=RETURN1=RETURN2=CONS=PROD=str(0)        
         # --- Update Domoticz device with new value ---
@@ -161,7 +159,7 @@ class Dev:
             # P1 Smart Meter (Type FA, SubType 1)
             if self.Type == 250 and self.SubType in (1, 6):
                 # sValue = f"{usage1};{usage2};{return1};{return2};{cons};{prod}")
-                if "TotalActivePower" in self.name:
+                if "Total Active Power" in self.name:
                     outerClass.active_power.update(int(payload))
                     if payload < 0:
                         outerClass.reverse_power.update(abs(int(payload)))
@@ -169,7 +167,7 @@ class Dev:
                     else:
                         outerClass.reverse_power.update(0)
                         outerClass.forward_power.update(int(payload))
-                if "TotalReactivePower" in self.name:
+                if "Total Reactive Power" in self.name:
                     outerClass.reactive_power.update(int(payload))
                     if payload < 0:
                         outerClass.reverse_reactive_power.update(abs(int(payload)))
@@ -177,6 +175,11 @@ class Dev:
                     else:
                         outerClass.reverse_reactive_power.update(0)
                         outerClass.forward_reactive_power.update(int(payload))
+                if "Total Energy" in self.name:
+                        outerClass.total_energy = int(payload)
+                        USAGE1=str(payload)
+                        CONS = str(int(outerClass.active_power.get()))
+                        sValue = USAGE1+";"+USAGE2+";"+RETURN1+";"+RETURN2+";"+CONS+";"+PROD
                 if "Import Energy" in self.name:
                     USAGE1=str(payload)
                     CONS = str(outerClass.forward_power.get())
@@ -289,13 +292,13 @@ class BasePlugin:
         self.devs = [
                # columns description, in one line:
                #Dev(ID, Name, Multiplier, Register, Size, FunctionCode, Type, SubType, Description)
-                Dev(1,"Total Energy",0.01,0x00,size=2,functioncode=3,Type=250,SubType=1,Description="Total energy balance"),
-                Dev(2,"Life Energy",0.01,0x00,size=2,functioncode=3,Type=250,SubType=1,Description="Total energy flow"),
-                Dev(3,"Reserved1",0.01,0x02,size=2,functioncode=3,Used=0,Type=250,SubType=1,Description="Reserved1"),
-                Dev(4,"Reactive Energy",0.01,0x04,size=2,functioncode=3,options={"Custom":"1;kVArh"},Type=250,SubType=6,Description="Reactive energy"), # "Custom":"1;kVArh
+                Dev(1,"Total Energy",1,0x00,size=2,functioncode=3,Type=250,SubType=1,Description="Total energy balance"),
+                Dev(2,"Life Energy",1,0x00,size=2,functioncode=3,Type=250,SubType=1,Description="Total energy flow"),
+                Dev(3,"Reserved1",1,0x02,size=2,functioncode=3,Used=0,Type=250,SubType=1,Description="Reserved1"),
+                Dev(4,"Reactive Energy",1,0x04,size=2,functioncode=3,options={"Custom":"1;kVArh"},Type=250,SubType=6,Description="Reactive energy"), # "Custom":"1;kVArh
                 Dev(5,"Reserved2",1,0x06,size=2,functioncode=3,Used=0,Type=250,SubType=1,Description="Reserved2"),
-                Dev(6,"Import Energy",0.01,0x08,size=2,functioncode=3,Type=250,SubType=1,Description="Forward energy"),
-                Dev(7,"Export Energy",0.01,0xA,size=2,functioncode=3,Type=250,SubType=1,Description="Reverse energy"),
+                Dev(6,"Import Energy",1,0x08,size=2,functioncode=3,Type=250,SubType=1,Description="Forward energy"),
+                Dev(7,"Export Energy",1,0xA,size=2,functioncode=3,Type=250,SubType=1,Description="Reverse energy"),
                 Dev(8,"Voltage Frequency",0.01,0x11,size=1,functioncode=3,options={"Custom":"1;Hz"},Type=243,SubType=31,Description="Voltage Frequency"),
              
                 Dev(9, "Voltage L1",0.1,0x80,size=1,functioncode=3,Type=243,SubType=8,Description="Voltage L1"),
