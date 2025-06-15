@@ -289,13 +289,13 @@ class BasePlugin:
         self.devs = [
                # columns description, in one line:
                #Dev(ID, Name, Multiplier, Register, Size, FunctionCode, Type, SubType, Description)
-                Dev(1,"Total Energy",0.1,0x00,size=2,functioncode=3,Type=250,SubType=1,Description="Total energy balance"),
-                Dev(2,"Life Energy",0.1,0x00,size=2,functioncode=3,Type=250,SubType=1,Description="Total energy flow"),
-                Dev(3,"Reserved1",0.1,0x02,size=2,functioncode=3,Used=0,Type=250,SubType=1,Description="Reserved1"),
-                Dev(4,"Reactive Energy",10,0x04,size=2,functioncode=3,options={"Custom":"1;kVArh"},Type=250,SubType=6,Description="Reactive energy"), # "Custom":"1;kVArh
-                Dev(5,"Reserved2",10,0x06,size=2,functioncode=3,Used=0,Type=250,SubType=1,Description="Reserved2"),
-                Dev(6,"Import Energy",10,0x08,size=2,functioncode=3,Type=250,SubType=1,Description="Forward energy"),
-                Dev(7,"Export Energy",10,0xA,size=2,functioncode=3,Type=250,SubType=1,Description="Reverse energy"),
+                Dev(1,"Total Energy",0.01,0x00,size=2,functioncode=3,Type=250,SubType=1,Description="Total energy balance"),
+                Dev(2,"Life Energy",0.01,0x00,size=2,functioncode=3,Type=250,SubType=1,Description="Total energy flow"),
+                Dev(3,"Reserved1",0.01,0x02,size=2,functioncode=3,Used=0,Type=250,SubType=1,Description="Reserved1"),
+                Dev(4,"Reactive Energy",0.01,0x04,size=2,functioncode=3,options={"Custom":"1;kVArh"},Type=250,SubType=6,Description="Reactive energy"), # "Custom":"1;kVArh
+                Dev(5,"Reserved2",1,0x06,size=2,functioncode=3,Used=0,Type=250,SubType=1,Description="Reserved2"),
+                Dev(6,"Import Energy",0.01,0x08,size=2,functioncode=3,Type=250,SubType=1,Description="Forward energy"),
+                Dev(7,"Export Energy",0.01,0xA,size=2,functioncode=3,Type=250,SubType=1,Description="Reverse energy"),
                 Dev(8,"Voltage Frequency",0.01,0x11,size=1,functioncode=3,options={"Custom":"1;Hz"},Type=243,SubType=31,Description="Voltage Frequency"),
              
                 Dev(9, "Voltage L1",0.1,0x80,size=1,functioncode=3,Type=243,SubType=8,Description="Voltage L1"),
