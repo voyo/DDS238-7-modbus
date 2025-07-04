@@ -29,20 +29,34 @@ Requirements:
                 <option label="False" value="Normal"  default="true" />
             </options>
         </param>
+        
+        
     </params>
 </plugin>
 """
 
 import minimalmodbus
 import serial
-import Domoticz
+try:
+    import Domoticz
+except ImportError:
+    import fakeDomoticz as Domoticz
 from time import sleep
+
+
+
 
 # for TCP modbus connection
 from pyModbusTCP.client import ModbusClient
 from pymodbus.constants import Endian
 from pymodbus.payload import BinaryPayloadDecoder
 
+# ANSI color codes (global context)
+ANSI_BLUE = '\033[94m'
+ANSI_RED = '\033[91m'
+ANSI_GREEN = '\033[92m'
+ANSI_YELLOW = '\033[93m'
+ANSI_RESET = '\033[0m'
 
 # Domoticz shows graphs with intervals of 5 minutes.
 # When collecting information from the inverter more frequently than that, then it makes no sense to only show the last value.
@@ -55,6 +69,7 @@ class Average:
     def __init__(self):
         self.samples = []
         self.max_samples = 30
+
 
     def set_max_samples(self, max):
         self.max_samples = max
@@ -103,25 +118,39 @@ class Dev:
 
   def UpdateValue(self, RS485, outerClass):
     try:
+        if self.size == 0: # size=0 means virtual device, we dont need to read modbus value, it will be calculated
+            value = 0
+            payload = 0
         # Try to read registers directly - pyModbusTCP will attempt to connect if needed
-        if self.size == 1:
+        elif self.size == 1:
             registers = RS485.read_holding_registers(self.register, self.size)
             if registers is None or len(registers) == 0:
-                raise Exception("Failed to read registers")
+                Domoticz.Log(f"First attempt to read register {self.register} failed for {self.name}, retrying...")
+                registers = RS485.read_holding_registers(self.register, self.size)
+                if registers is None or len(registers) == 0:
+                    raise Exception("Failed to read registers after second attempt")
             value = registers[0]
             if self.signed and value > 32767:
                 value -= 65536 # this means that the value is negative
             payload = value * self.multipler
         
         elif self.size == 2:
+            Domoticz.Log(f"PROBA read MODBUS dla size=2, device {self.name}")
             registers = RS485.read_holding_registers(self.register, self.size)
+            registers = RS485.read_holding_registers(self.register, self.size)
+            Domoticz.Log(f"SIZE=2, reg={registers}, len={len(registers)}")
             if registers is None or len(registers) < 2:
-                raise Exception("Failed to read registers")
+                Domoticz.Log(f"First attempt to read register {self.register} (size=2) failed for {self.name}, retrying...")
+                registers = RS485.read_holding_registers(self.register, self.size)
+                Domoticz.Log(f"Second attempt (size=2), reg={registers}, len={len(registers) if registers is not None else 'None'}")
+                if registers is None or len(registers) < 2:
+                    raise Exception("Failed to read registers after second attempt")
             value = (registers[0] << 16) + registers[1]
             if self.signed and value > 2147483647:
                 value -= 4294967296 # this means that the value is negative
             payload = value * self.multipler
-        
+
+    
         # Validate the value
         is_valid, reason = is_value_reasonable(payload, self.name)
         if not is_valid:
@@ -159,6 +188,45 @@ class Dev:
             # P1 Smart Meter (Type FA, SubType 1)
             if self.Type == 250 and self.SubType in (1, 6):
                 # sValue = f"{usage1};{usage2};{return1};{return2};{cons};{prod}")
+                if "Total Energy" in self.name:
+                        outerClass.total_energy = int(payload)
+                        USAGE1=str(payload)
+                        CONS = str(int(outerClass.active_power.get()))
+                        sValue = USAGE1+";"+USAGE2+";"+RETURN1+";"+RETURN2+";"+CONS+";"+PROD
+                        Domoticz.Log(f"TOTAL ENERGY: {sValue}")
+                elif "Import Energy" in self.name:
+                    USAGE1=str(payload)
+                    outerClass.ImportEnergy = payload
+                    CONS = str(outerClass.forward_power.get())
+                    sValue = USAGE1+";"+USAGE2+";"+RETURN1+";"+RETURN2+";"+CONS+";"+PROD
+                elif "Export Energy" in self.name:
+                    RETURN1=str(payload)
+                    outerClass.ExportEnergy = payload
+                    PROD = str(abs(outerClass.reverse_power.get())) 
+                    sValue = USAGE1+";"+USAGE2+";"+RETURN1+";"+RETURN2+";"+CONS+";"+PROD
+                elif "Life Energy" in self.name:
+                    USAGE1 = str(int(outerClass.ImportEnergy))
+                    RETURN1 = str(int(outerClass.ExportEnergy))
+                    CONS = str(int(outerClass.forward_power.get()))
+                    PROD = str(int(outerClass.reverse_power.get()))
+                    sValue = USAGE1+";"+USAGE2+";"+RETURN1+";"+RETURN2+";"+CONS+";"+PROD
+                elif "Reactive Energy" in self.name:
+                    USAGE1=str(payload)
+                    CONS = str(abs(int(outerClass.reactive_power.get())))
+                    Domoticz.Log(f"{ANSI_YELLOW}REACTIVE ENERGY CONS: {CONS} {ANSI_RESET}" )
+                    sValue = USAGE1+";"+USAGE2+";"+RETURN1+";"+RETURN2+";"+CONS+";"+PROD
+                else:
+                    Domoticz.Log(f"WPADŁO ELSE, dla device {self.ID}, {self.name}")
+                    sValue = f"{payload:.2f};0;0;0;0"
+
+                Devices[self.ID].Update(nValue=0, sValue=sValue)
+                Domoticz.Log(f"Domoticz P1 device {self.ID} updated with sValue: {sValue}")
+            # Energy counter: sValue must be "<value>;<counter>"
+#            elif self.Type == 250 and self.SubType in (1, 6):
+#                sValue = f"{payload:.2f};0"
+#                Devices[self.ID].Update(nValue=0, sValue=sValue)
+#                Domoticz.Log(f"Domoticz energy device {self.ID} updated with sValue: {sValue}")
+            else:
                 if "Total Active Power" in self.name:
                     outerClass.active_power.update(int(payload))
                     if payload < 0:
@@ -167,46 +235,11 @@ class Dev:
                     else:
                         outerClass.reverse_power.update(0)
                         outerClass.forward_power.update(int(payload))
-                if "Total Reactive Power" in self.name:
-                    outerClass.reactive_power.update(int(payload))
-                    if payload < 0:
-                        outerClass.reverse_reactive_power.update(abs(int(payload)))
-                        outerClass.forward_reactive_power.update(0)
-                    else:
-                        outerClass.reverse_reactive_power.update(0)
-                        outerClass.forward_reactive_power.update(int(payload))
-                if "Total Energy" in self.name:
-                        outerClass.total_energy = int(payload)
-                        USAGE1=str(payload)
-                        CONS = str(int(outerClass.active_power.get()))
-                        sValue = USAGE1+";"+USAGE2+";"+RETURN1+";"+RETURN2+";"+CONS+";"+PROD
-                if "Import Energy" in self.name:
-                    USAGE1=str(payload)
-                    CONS = str(outerClass.forward_power.get())
-                    sValue = USAGE1+";"+USAGE2+";"+RETURN1+";"+RETURN2+";"+CONS+";"+PROD
-                elif "Export Energy" in self.name:
-                    RETURN1=str(payload)
-                    PROD = str(abs(outerClass.reverse_power.get())) 
-                    sValue = USAGE1+";"+USAGE2+";"+RETURN1+";"+RETURN2+";"+CONS+";"+PROD
-                elif "Life Energy" in self.name:
-                    USAGE1=str(payload)
-                    CONS = str(int(outerClass.active_power.get()))
-                    sValue = USAGE1+";"+USAGE2+";"+RETURN1+";"+RETURN2+";"+CONS+";"+PROD
-                elif "Reactive Energy" in self.name:
-                    USAGE1=str(payload)
-                    CONS = str(int(outerClass.reactive_power.get()))
-                    sValue = USAGE1+";"+USAGE2+";"+RETURN1+";"+RETURN2+";"+CONS+";"+PROD
-                else:
-                    sValue = f"{payload:.2f};0;0;0;0"
+                elif "Total Reactive Power" in self.name:
+                    reactive_energy=int(payload*float(1000))
+                    Domoticz.Log(f"{ANSI_YELLOW}REACTIVE ENERGY: {reactive_energy} {ANSI_RESET}" )
+                    outerClass.reactive_power.update(int(reactive_energy))
 
-                Devices[self.ID].Update(nValue=0, sValue=sValue)
-                Domoticz.Log(f"Domoticz P1 device {self.ID} updated with sValue: {sValue}")
-            # Energy counter: sValue must be "<value>;<counter>"
-            elif self.Type == 250 and self.SubType in (1, 6):
-                sValue = f"{payload:.2f};0"
-                Devices[self.ID].Update(nValue=0, sValue=sValue)
-                Domoticz.Log(f"Domoticz energy device {self.ID} updated with sValue: {sValue}")
-            else:
                 Devices[self.ID].Update(nValue=0, sValue=str(payload))
                 Domoticz.Log(f"Domoticz device {self.ID} updated with value: {payload}")
         else:
@@ -224,8 +257,9 @@ class BasePlugin:
         self.RS485 = ""
         # Active power for last 5 minutes
         self.active_power = Average()
-        # Reactive power for last 5 minutes
-        self.reactive_power = Average()
+        self.reactive_power = Average()        # Reactive power for last 5 minutes
+        self.reverse_reactive_power = Average()
+        self.forward_reactive_power = Average()
         # Forward power for last 5 minutes
         self.forward_power = Average()
         self.reverse_power = Average()
@@ -234,6 +268,8 @@ class BasePlugin:
         self.current = 0
         self.apparent_power = 0
         self.total_energy = 0
+        self.ImportEnergy = 0
+        self.ExportEnergy = 0
         self.devs = []  # Initialize empty device list
         return
 
@@ -292,13 +328,13 @@ class BasePlugin:
         self.devs = [
                # columns description, in one line:
                #Dev(ID, Name, Multiplier, Register, Size, FunctionCode, Type, SubType, Description)
-                Dev(1,"Total Energy",1,0x00,size=2,functioncode=3,Type=250,SubType=1,Description="Total energy balance"),
-                Dev(2,"Life Energy",1,0x00,size=2,functioncode=3,Type=250,SubType=1,Description="Total energy flow"),
-                Dev(3,"Reserved1",1,0x02,size=2,functioncode=3,Used=0,Type=250,SubType=1,Description="Reserved1"),
-                Dev(4,"Reactive Energy",1,0x04,size=2,functioncode=3,options={"Custom":"1;kVArh"},Type=250,SubType=6,Description="Reactive energy"), # "Custom":"1;kVArh
-                Dev(5,"Reserved2",1,0x06,size=2,functioncode=3,Used=0,Type=250,SubType=1,Description="Reserved2"),
-                Dev(6,"Import Energy",1,0x08,size=2,functioncode=3,Type=250,SubType=1,Description="Forward energy"),
-                Dev(7,"Export Energy",1,0xA,size=2,functioncode=3,Type=250,SubType=1,Description="Reverse energy"),
+                Dev(1,"Total Energy",10,0x00,size=2,functioncode=3,Type=250,SubType=1,Description="Total energy balance"),
+                Dev(2,"Life Energy",10,0x00,size=0,functioncode=3,Type=250,SubType=1,Description="Total energy flow"),
+                Dev(3,"Reserved1",10,0x02,size=0,functioncode=3,Used=0,Type=250,SubType=1,Description="Reserved1"),
+                Dev(4,"Reactive Energy",10,0x02,size=2,functioncode=3,options={"Custom":"1;kVArh"},Type=250,SubType=6,Description="Reactive energy"), # "Custom":"1;kVArh
+                Dev(5,"Reserved2",10,0x06,size=0,functioncode=3,Used=0,Type=250,SubType=1,Description="Reserved2"),
+                Dev(6,"Import Energy",10,0x08,size=2,functioncode=3,Type=250,SubType=1,Description="Forward energy"),
+                Dev(7,"Export Energy",10,0xA,size=2,functioncode=3,Type=250,SubType=1,Description="Reverse energy"),
                 Dev(8,"Voltage Frequency",0.01,0x11,size=1,functioncode=3,options={"Custom":"1;Hz"},Type=243,SubType=31,Description="Voltage Frequency"),
              
                 Dev(9, "Voltage L1",0.1,0x80,size=1,functioncode=3,Type=243,SubType=8,Description="Voltage L1"),
@@ -328,7 +364,6 @@ class BasePlugin:
                 Dev(28,"Power Factor L1",0.001,0x96,size=1,functioncode=3,Type=243,SubType=31,Description="Power factor L1"),
                 Dev(29,"Power Factor L2",0.001,0x97,size=1,functioncode=3,Type=243,SubType=31,Description="Power factor L2"),
                 Dev(30,"Power Factor L3",0.001,0x98,size=1,functioncode=3,Type=243,SubType=31,Description="Power factor L3")
-
                 ]
                 
     def onStop(self):
@@ -353,6 +388,27 @@ class BasePlugin:
                     self.runInterval = int(Parameters["Mode3"])
                     if Parameters["Mode6"] == 'Debug':
                         Domoticz.Debug("Resetting runInterval to: "+str(self.runInterval))
+        # After updating all devices, print selected Energies and Powers in blue, single line with real values
+     
+        selected_names = [
+            "Total Energy",
+            "Life Energy",
+            "Import Energy",
+            "Export Energy",
+            "Total Active Power",
+            "Total Reactive Power",
+            "Total Apparent Power"
+        ]
+        line_parts = []
+        for dev in self.devs:
+            if dev.name in selected_names:
+                try:
+                    value = Devices[dev.ID].sValue if dev.ID in Devices else 'N/A'
+                except Exception:
+                    value = 'N/A'
+                line_parts.append(f"{dev.name}: {value}")
+        if line_parts:
+            Domoticz.Log(f"{ANSI_BLUE}{' | '.join(line_parts)}{ANSI_RESET}")
         return True                
 
 
@@ -460,3 +516,5 @@ def is_value_reasonable(value, register_name):
     # If device name not found in ranges
     Domoticz.Log(f"Warning: No validation range defined for device: {register_name}")
     return True, f"No validation range defined for {register_name}"
+
+
