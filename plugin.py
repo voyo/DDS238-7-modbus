@@ -1,14 +1,16 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
 """
-DDS238-7 Three Phase Smart Meter. Domoticz plugin.
+DDS238-7 (3-phase) and DDS238-2 (1-phase) Smart Meter. Domoticz plugin.
 Author: voyo@no-ip.pl
+Version: 1.0.0
 Requirements:
     1.python module minimalmodbus -> http://minimalmodbus.readthedocs.io/en/master/
         (pi@raspberrypi:~$ sudo pip3 install minimalmodbus)
     2.Communication module Modbus USB to RS485 converter module
 """
 """
-<plugin key="DDS238-7" name="DDS238-7 modbus" version="0.9.0" author="voyo@no-ip.pl">
+<plugin key="DDS238" name="DDS238 Modbus Meter" version="1.0.0" author="voyo@no-ip.pl">
     <params>
         <param field="Address" label="IP Address" width="200px" required="true" default="127.0.0.1"/>
         <param field="Port" label="Port" width="30px" required="true" default="502"/>
@@ -23,6 +25,13 @@ Requirements:
                 <option label="RTU" value="RTU" />
             </options>
          </param>
+        <param field="Mode5" label="Meter Model" width="100px">
+            <description><h2>Meter Model</h2>Select your meter model</description>
+            <options>
+                <option label="DDS238-7 (3-phase)" value="DDS238-7" default="true" />
+                <option label="DDS238-2 (1-phase)" value="DDS238-2" />
+            </options>
+        </param>
         <param field="Mode6" label="Debug" width="75px">
             <options>
                 <option label="True" value="Debug"/>
@@ -33,18 +42,30 @@ Requirements:
 </plugin>
 """
 
-import minimalmodbus
-import serial
+import time
+import math
+
 try:
     import Domoticz
 except ImportError:
     import fakeDomoticz as Domoticz
-import time
-import math
 
-# for TCP modbus connection
-from pyModbusTCP.client import ModbusClient
-from pymodbus.constants import Endian
+try:
+    import minimalmodbus
+    import serial
+except ImportError:
+    minimalmodbus = None
+    serial = None
+
+try:
+    from pyModbusTCP.client import ModbusClient
+except ImportError:
+    ModbusClient = None
+
+try:
+    from pymodbus.constants import Endian
+except ImportError:
+    Endian = None
 
 # ==============================================================================
 # LOGGER CLASS - Unified logging without threading
@@ -110,7 +131,7 @@ class Logger:
 logger = Logger()
 
 # ==============================================================================
-# VALIDATION CONFIGURATION
+# VALIDATION CONFIGURATION - Extended for both meter types
 # ==============================================================================
 VALIDATION_RANGES = {
     # Energy Measurements
@@ -121,23 +142,28 @@ VALIDATION_RANGES = {
     "Export Energy": (0, 100000000),     # Wh
 
     # Voltage Related
+    "Voltage": (180, 260),               # V (1-phase)
     "Voltage L1": (180, 260),            # V
     "Voltage L2": (180, 260),            # V
     "Voltage L3": (180, 260),            # V
     "Voltage Frequency": (45, 65),       # Hz
+    "Frequency": (45, 65),               # Hz (1-phase)
 
     # Current Related
+    "Current": (0, 100),                 # A (1-phase)
     "Current L1": (0, 100),              # A
     "Current L2": (0, 100),              # A
     "Current L3": (0, 100),              # A
 
     # Active Power (signed values)
+    "Active Power": (-25000, 25000),        # W (1-phase)
     "Total Active Power": (-25000, 25000),  # W
     "Active Power L1": (-25000, 25000),     # W
     "Active Power L2": (-25000, 25000),     # W
     "Active Power L3": (-25000, 25000),     # W
 
     # Reactive Power
+    "Reactive Power": (-25000, 25000),      # VAr (1-phase)
     "Total Reactive Power": (-25000, 25000),  # kVAr
     "Reactive Power L1": (-25000, 25000),     # kVAr
     "Reactive Power L2": (-25000, 25000),     # kVAr
@@ -505,7 +531,7 @@ class Dev:
         
         # Update plugin averages for power measurements
         if self.type_id == 243:
-            if self.name == "Total Active Power":
+            if self.name in ["Total Active Power", "Active Power"]:
                 plugin_instance.active_power.update(int(payload))
                 if payload < 0:
                     plugin_instance.reverse_power.update(abs(int(payload)))
@@ -519,8 +545,8 @@ class Dev:
                 plugin_instance.current = int(payload)
             elif "Apparent Power" in self.name:
                 plugin_instance.apparent_power = int(payload)
-            elif "Total Reactive Power" in self.name:
-                reactive_energy = int(payload * 1000)
+            elif self.name in ["Total Reactive Power", "Reactive Power"]:
+                reactive_energy = int(payload * 1000) if "Total" in self.name else int(payload)
                 logger.debug(f"Reactive energy: {reactive_energy}")
                 plugin_instance.reactive_power.update(reactive_energy)
         
@@ -556,7 +582,7 @@ class Dev:
             plugin_instance.export_energy = payload
             prod = str(abs(plugin_instance.reverse_power.get()))
             
-        elif "Life Energy" in self.name:
+        elif "Life Energy" in self.name or "Total Power Meter" in self.name:
             # Virtual device - combines import and export statistics
             usage1 = str(int(plugin_instance.import_energy))
             return1 = str(int(plugin_instance.export_energy))
@@ -574,11 +600,12 @@ class Dev:
 # MAIN PLUGIN CLASS
 # ==============================================================================
 class BasePlugin:
-    """Main plugin class for DDS238-7 Modbus meter"""
+    """Main plugin class for DDS238 Modbus meters (both 3-phase and 1-phase)"""
     
     def __init__(self):
         self.run_interval = 1
         self.rs485_connection = None
+        self.meter_model = "DDS238-7"  # Default to 3-phase
         
         # Power averages
         self.active_power = Average()
@@ -587,6 +614,12 @@ class BasePlugin:
         self.forward_reactive_power = Average()
         self.forward_power = Average()
         self.reverse_power = Average()
+        
+        # Additional averages for 1-phase meter
+        self.voltage_avg = Average()
+        self.current_avg = Average()
+        self.power_factor_avg = Average()
+        self.frequency_avg = Average()
         
         # Latest values (not averages)
         self.voltage = 0
@@ -616,15 +649,20 @@ class BasePlugin:
             Domoticz.Debugging(0)
             logger.set_debug_mode(False)
         
-        logger.info(f"DDS238-7 Modbus plugin start, mode: {Parameters['Mode4']}")
+        # Get meter model
+        self.meter_model = Parameters.get("Mode5", "DDS238-7")
+        logger.info(f"DDS238 Modbus plugin start, Model: {self.meter_model}, Connection: {Parameters['Mode4']}")
         
         # Initialize Modbus connection
         if not self._initialize_connection():
             logger.error("Failed to initialize Modbus connection")
             return
         
-        # Initialize devices
-        self._initialize_devices()
+        # Initialize devices based on meter model
+        if self.meter_model == "DDS238-2":
+            self._initialize_devices_1phase()
+        else:
+            self._initialize_devices_3phase()
     
     def _initialize_connection(self):
         """Initialize Modbus connection (RTU or TCP)"""
@@ -632,6 +670,10 @@ class BasePlugin:
         
         try:
             if Parameters["Mode4"] == "RTU":
+                if minimalmodbus is None:
+                    logger.error("minimalmodbus module not installed! Install with: pip3 install minimalmodbus")
+                    return False
+                    
                 self.rs485_connection = minimalmodbus.Instrument(Parameters["SerialPort"], device_id)
                 self.rs485_connection.serial.baudrate = Parameters["Mode1"]
                 self.rs485_connection.serial.bytesize = 8
@@ -644,6 +686,10 @@ class BasePlugin:
                 logger.info(f"RTU connection initialized on {Parameters['SerialPort']}")
                 
             elif Parameters["Mode4"] == "TCP":
+                if ModbusClient is None:
+                    logger.error("pyModbusTCP module not installed! Install with: pip3 install pyModbusTCP")
+                    return False
+                    
                 logger.debug(f"Connecting to {Parameters['Address']}:{Parameters['Port']} unit ID: {device_id}")
                 self.rs485_connection = ModbusClient(
                     host=Parameters["Address"],
@@ -666,8 +712,34 @@ class BasePlugin:
             logger.error(f"Connection initialization failed: {str(e)}")
             return False
     
-    def _initialize_devices(self):
-        """Initialize device list"""
+    def _initialize_devices_1phase(self):
+        """Initialize device list for DDS238-2 (1-phase meter)"""
+        logger.info("Initializing devices for DDS238-2 (1-phase meter)")
+        
+        self.devices = [
+            # Energy measurements - registers match DDS238-2 documentation
+            Dev(1, "Total Energy", 10, 0x00, size=2, function_code=3, type_id=250, sub_type=1, description="Total energy"),
+            Dev(2, "Export Energy", 10, 0x08, size=2, function_code=3, type_id=250, sub_type=1, description="Export energy"),
+            Dev(3, "Import Energy", 10, 0x0A, size=2, function_code=3, type_id=250, sub_type=1, description="Import energy"),
+            
+            # Electrical measurements
+            Dev(4, "Voltage", 0.1, 0x0C, size=1, function_code=3, type_id=243, sub_type=8, description="Voltage"),
+            Dev(5, "Current", 0.01, 0x0D, size=1, function_code=3, type_id=243, sub_type=23, description="Current"),
+            Dev(6, "Active Power", 1, 0x0E, size=1, function_code=3, options={"Custom": "1;W"}, type_id=243, sub_type=31, signed=True, description="Active power"),
+            Dev(7, "Reactive Power", 1, 0x0F, size=1, function_code=3, options={"Custom": "1;VAr"}, type_id=243, sub_type=31, signed=True, description="Reactive power"),
+            Dev(8, "Power Factor", 0.001, 0x10, size=1, function_code=3, type_id=243, sub_type=31, description="Power factor"),
+            Dev(9, "Frequency", 0.01, 0x11, size=1, function_code=3, options={"Custom": "1;Hz"}, type_id=243, sub_type=31, description="Frequency"),
+            
+            # Combined meter (virtual device for import/export overview)
+            Dev(10, "Total Power Meter", 10, 0x00, size=0, function_code=3, type_id=250, sub_type=1, description="Combined import/export meter"),
+        ]
+        
+        logger.info(f"Initialized {len(self.devices)} devices for 1-phase meter")
+    
+    def _initialize_devices_3phase(self):
+        """Initialize device list for DDS238-7 (3-phase meter)"""
+        logger.info("Initializing devices for DDS238-7 (3-phase meter)")
+        
         self.devices = [
             # Energy measurements
             Dev(1, "Total Energy", 10, 0x00, size=2, function_code=3, type_id=250, sub_type=1, description="Total energy balance"),
@@ -716,11 +788,11 @@ class BasePlugin:
             Dev(30, "Power Factor L3", 0.001, 0x98, size=1, function_code=3, type_id=243, sub_type=31, description="Power factor L3")
         ]
         
-        logger.info(f"Initialized {len(self.devices)} devices")
+        logger.info(f"Initialized {len(self.devices)} devices for 3-phase meter")
     
     def onStop(self):
         """Clean up on plugin stop"""
-        logger.info("DDS238-7 Modbus plugin stopping")
+        logger.info(f"DDS238 Modbus plugin stopping (Model: {self.meter_model})")
         
         # Log final health statistics
         logger.status(f"Final connection health: {self.health_monitor.get_stats()}")
@@ -760,6 +832,10 @@ class BasePlugin:
         """Update all device values"""
         for device in self.devices:
             try:
+                # Skip unused devices
+                if hasattr(device, 'used') and device.used == 0:
+                    continue
+                    
                 device.update_value(self.rs485_connection, self)
             except Exception as e:
                 logger.error(f"Failed to update device {device.name}: {str(e)}")
@@ -769,16 +845,29 @@ class BasePlugin:
         """Log summary of key values (only in debug mode)"""
         if not logger.debug_mode:
             return
-            
-        selected_names = [
-            "Total Energy",
-            "Life Energy",
-            "Import Energy",
-            "Export Energy",
-            "Total Active Power",
-            "Total Reactive Power",
-            "Total Apparent Power"
-        ]
+        
+        if self.meter_model == "DDS238-2":
+            # 1-phase meter summary
+            selected_names = [
+                "Total Energy",
+                "Import Energy",
+                "Export Energy",
+                "Voltage",
+                "Current",
+                "Active Power",
+                "Power Factor"
+            ]
+        else:
+            # 3-phase meter summary
+            selected_names = [
+                "Total Energy",
+                "Life Energy",
+                "Import Energy",
+                "Export Energy",
+                "Total Active Power",
+                "Total Reactive Power",
+                "Total Apparent Power"
+            ]
         
         summary_parts = []
         for device in self.devices:
@@ -809,6 +898,7 @@ class BasePlugin:
     def _dump_config_to_log(self):
         """Dump configuration to log for debugging"""
         logger.debug("=== Configuration ===")
+        logger.debug(f"Meter Model: {self.meter_model}")
         for key in Parameters:
             if Parameters[key] != "":
                 logger.debug(f"{key}: {Parameters[key]}")
@@ -837,5 +927,41 @@ def onStop():
 def onHeartbeat():
     """Domoticz callback: Heartbeat"""
     global _plugin
-    logger.debug("onHeartbeat called")
     _plugin.onHeartbeat()
+
+# Additional Domoticz callbacks (required even if not used)
+def onConnect(Connection, Status, Description):
+    """Domoticz callback: Connection status"""
+    pass
+
+def onMessage(Connection, Data):
+    """Domoticz callback: Message received"""
+    pass
+
+def onCommand(Unit, Command, Level, Hue):
+    """Domoticz callback: Command received"""
+    pass
+
+def onNotification(Name, Subject, Text, Status, Priority, Sound, ImageFile):
+    """Domoticz callback: Notification"""
+    pass
+
+def onDisconnect(Connection):
+    """Domoticz callback: Disconnection"""
+    pass
+
+def onDeviceAdded(Unit):
+    """Domoticz callback: Device added"""
+    pass
+
+def onDeviceModified(Unit):
+    """Domoticz callback: Device modified"""
+    pass
+
+def onDeviceRemoved(Unit):
+    """Domoticz callback: Device removed"""
+    pass
+
+def onSecurityEvent(Unit, Level, Description):
+    """Domoticz callback: Security event"""
+    pass
