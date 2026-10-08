@@ -746,7 +746,7 @@ class BasePlugin:
             Dev(1, "Total Energy", 10, 0x00, size=2, function_code=3, type_id=250, sub_type=1, description="Total energy balance"),
             Dev(2, "Life Energy", 10, 0x00, size=0, function_code=3, type_id=250, sub_type=1, description="Total energy flow (virtual)"),
             Dev(3, "Reserved1", 10, 0x02, size=0, function_code=3, used=0, type_id=250, sub_type=1, description="Reserved1"),
-            Dev(4, "Reactive Energy", 10, 0x02, size=2, function_code=3, options={"Custom": "1;kVArh"}, type_id=250, sub_type=6, description="Reactive energy"),
+            Dev(4, "Reactive Energy", 10, 0x02, size=2, function_code=3, options={"Custom": "1;kVArh"}, type_id=250, sub_type=1, description="Reactive energy"),
             Dev(5, "Reserved2", 10, 0x06, size=0, function_code=3, used=0, type_id=250, sub_type=1, description="Reserved2"),
             Dev(6, "Import Energy", 10, 0x08, size=2, function_code=3, type_id=250, sub_type=1, description="Forward energy"),
             Dev(7, "Export Energy", 10, 0xA, size=2, function_code=3, type_id=250, sub_type=1, description="Reverse energy"),
