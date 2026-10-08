@@ -389,8 +389,9 @@ class BleedingDetector:
         # Check if all values are identical (and we have enough samples)
         if len(values) >= self.identical_threshold:
             if len(set(values)) == 1:  # All values are the same
-                # Additional check: don't flag legitimate zero values for energy counters
-                if raw_value == 0 and "Energy" in device_name:
+                # Cumulative energy counters stay constant when nothing is imported/exported
+                # (e.g. Export Energy without PV feed-in), and an idle load legitimately reads 0.
+                if "Energy" in device_name or raw_value == 0:
                     return False
                     
                 logger.warning(f"Bleeding suspected for {device_name}: {self.identical_threshold} identical values: {raw_value}")
