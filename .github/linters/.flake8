@@ -1,0 +1,4 @@
+[flake8]
+# Domoticz plugin conventions: framework-injected globals (F821), `global _plugin`
+# in callbacks (F824), imports after sys.path setup (E402). The rest is legacy style debt.
+extend-ignore = E128,E203,E302,E305,E402,E501,F821,F824,W291,W293
